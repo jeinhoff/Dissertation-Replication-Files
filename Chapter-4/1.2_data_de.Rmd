@@ -1,0 +1,184 @@
+---
+title: "1.2_data_de"
+---
+
+```{r setup}
+# Load packages
+library("tidyverse")
+library("rio")
+
+# Clear workplace
+rm(list = ls())
+
+# Load comparative panel file (CPF)
+load("data/data_preprocessed/data_cpf.RData")
+
+# Filter for Germany and years used in the analysis 
+data_de <- data_cpf %>% filter(country == "Germany")
+
+rm(data_cpf)
+
+```
+
+```{r}
+weight <- import(".../ppathl.dta")
+
+weight <- weight %>% 
+  mutate(orgpid = as.character(pid), weight = phrf) %>%
+  select(orgpid, syear, weight) 
+
+data_de <- data_de %>% left_join(weight, by = c("orgpid", "year" = "syear"))
+
+rm(weight)
+
+```
+
+# Partner employment status
+```{r}
+partner_emp <- import(".../pgen.dta")
+
+partner_emp_i <- partner_emp %>% select(pid, syear, pgpartnr)
+
+partner_emp_p <- partner_emp %>% select(pid, syear, pglfs)
+
+partner_emp <- partner_emp_i %>% left_join(partner_emp_p, by = c("syear", "pgpartnr" = "pid"))
+
+rm(partner_emp_i, partner_emp_p)
+
+partner_emp <- partner_emp %>%
+  mutate(
+    orgpid = as.character(pid),
+    year = as.numeric(syear),
+    employment_status_partner = case_when(
+      pglfs %in% c(11, 12) ~ "Employed",
+      pglfs %in% c(6) ~ "Unemployed",
+      pglfs %in% c(1, 2, 3, 4, 5, 8, 9, 10) ~ "Inactive",
+      T ~ NA_character_)) %>%
+  select(orgpid, year, employment_status_partner)
+
+data_de <- data_de %>% left_join(partner_emp, by = c("orgpid", "year"))
+
+data_de <- data_de %>% 
+  mutate(employment_status_partner = ifelse(marital_status != "Married or Living with partner", "No partner", employment_status_partner))
+
+rm(partner_emp)
+
+```
+
+# Housing variables and region
+```{r}
+# homeowner
+# homeowner_type
+# region
+soep_hh_1 <- import("data/data_raw/data_raw_de/hl.dta")
+soep_hh_1 <- soep_hh_1 %>% select(hid, syear, hlf0087_h)
+
+soep_hh_2 <- import("data/data_raw/data_raw_de/hgen.dta")
+soep_hh_2 <- soep_hh_2 %>% select(hid, syear, hgnuts1, hgowner, hgrsubs)
+  
+soep_hh <- soep_hh_1 %>% 
+  mutate(syear = as.numeric(syear)) %>%
+  left_join(soep_hh_2, by = c("hid", "syear")) %>% 
+  rename("year" = "syear", "homeowner" = "hgowner", "homeowner_type" = "hlf0087_h", "region" = "hgnuts1", "social_housing" = "hgrsubs")
+
+soep_hh <- soep_hh %>%
+  mutate(
+    homeowner = case_when(
+      homeowner == 1 ~ "Homeowner",
+      homeowner == 2 ~ "Renter"),
+    homeowner_type = case_when(
+      homeowner_type == 1 & homeowner == "Homeowner" ~ "Mortgagor",
+      homeowner_type == 2 & homeowner == "Homeowner" ~ "Outright owner",
+      homeowner == "Renter" ~ "Renter"),
+    social_housing = case_when(
+      social_housing %in% c(1, 2) & homeowner == "Renter" ~ 1,
+      social_housing %in% c(3) & homeowner == "Renter" ~ 0,
+      homeowner == "Homeowner" ~ 0),
+    region = case_when(
+      region == 1 ~ "Baden-Württemberg",
+      region == 2 ~ "Bayern",
+      region == 3 ~ "Berlin",
+      region == 4 ~ "Brandenburg",
+      region == 5 ~ "Bremen",
+      region == 6 ~ "Hamburg",
+      region == 7 ~ "Hessen",
+      region == 8 ~ "Mecklenburg-Vorpommern",
+      region == 9 ~ "Niedersachsen",
+      region == 10 ~ "Nordrhein-Westfalen",
+      region == 11 ~ "Rheinland-Pfalz",
+      region == 12 ~ "Saarland",
+      region == 13 ~ "Sachsen",
+      region == 14 ~ "Sachsen-Anhalt",
+      region == 15 ~ "Schleswig-Holstein",
+      region == 16 ~ "Thüringen")) %>%
+  select(hid, year, homeowner, homeowner_type, social_housing, region) %>%
+  unique()
+
+data_de <- data_de %>% left_join(soep_hh, by = c("hid", "year"))
+
+data_de[data_de < 0] <- NA
+
+rm(soep_hh_1, soep_hh_2, soep_hh)
+
+```
+
+```{r}
+# drop duplicate rows
+data_de <- data_de %>% group_by(orgpid, age) %>% slice(1)
+
+# keep respondents only until they enter retirement
+data_de <- data_de %>% group_by(orgpid) %>% mutate(retired = cumsum(retired)) %>% filter(retired %in% c(0, 1))
+
+# drop household identifier and adjust variables types
+data_de <- data_de %>% 
+  ungroup() %>% 
+  mutate(
+    orgpid = as.factor(orgpid),
+    hid = as.factor(hid),
+    age = as.numeric(age),
+    country = as.factor(country),
+    year = as.factor(year),
+    female = as.numeric(female),
+    year_born = as.numeric(year_born),
+    cohort_born = as.factor(cohort_born),
+    retired = as.numeric(retired),
+    migrant = as.factor(migrant),
+    education_level = as.factor(education_level),
+    marital_status = as.factor(marital_status),
+    partner_in_hh = as.numeric(partner_in_hh),
+    children_any = as.numeric(children_any),
+    household_size = as.numeric(household_size),
+    poor_health = as.numeric(poor_health),
+    employment_status = as.factor(employment_status),
+    employment_status_partner = as.factor(employment_status_partner),
+    hh_income_eq = as.numeric(hh_income_eq),
+    occupation_group = as.factor(occupation_group),
+    public_sector = as.numeric(public_sector),
+    self_employed = as.numeric(self_employed),
+    unemployment_rate = as.numeric(unemployment_rate),
+    inflation_rate = as.numeric(inflation_rate),
+    homeowner = as.factor(homeowner),
+    homeowner_type = as.factor(homeowner_type),
+    social_housing = as.factor(social_housing),
+    region = as.factor(region)) %>% 
+  unique()
+
+vars <- data_de %>% 
+  group_by(orgpid) %>% 
+  filter(age == min(age)) %>% 
+  select(orgpid, weight, hid) %>% 
+  slice(1) %>%
+  ungroup()
+
+data_de <- data_de %>% select(-c("weight", "hid")) %>% left_join(vars, by = "orgpid")
+
+rm(vars)
+
+data_de <- data_de %>% select(country, orgpid, hid, age, retired, homeowner, homeowner_type, social_housing, region, female, year_born, migrant, education_level, marital_status, children_any, household_size, poor_health, occupation_group, hh_income_eq, public_sector, self_employed, unemployment_rate, inflation_rate, weight)
+
+```
+
+```{r}
+save.image(".../data_de.RData")
+
+```
