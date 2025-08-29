@@ -1,0 +1,474 @@
+---
+title: '03_analysis_wle'
+---
+
+```{r setup}
+library(tidyverse)
+library(rio)
+library(demography)
+library(ggflags)
+library(gridExtra)
+library(ggh4x)
+
+options("scipen" = 100, "digits" = 4)
+
+rm(list = ls())
+
+load("outputs/data_final_55_64.RData")
+
+data$gender <- ifelse(data$gender == "Female population", "Female Population", "Male Population")
+
+data <- data %>% mutate(
+  country_group = case_when(
+    country_group %in% c("(1) Northern Europe") ~ "Northern Europe",
+    country_group %in% c("(2) Western Europe") ~ "Western Europe",
+    country_group %in% c("(3) Southern Europe") ~ "Southern Europe",
+    country_group %in% c("(4) Central and Eastern Europe") ~ "Central and Eastern Europe"))
+
+data$country_group <- factor(data$country_group, levels = c("Northern Europe", "Western Europe", "Southern Europe", "Central and Eastern Europe"))
+
+```
+
+# WLE adjusted for mortality
+```{r, warning = F}
+table_wle <- data %>% mutate(outcome = ifelse(status == "Employed", 1, 0))
+
+table_wle <- table_wle %>% filter(!is.na(outcome)) %>%
+  group_by(country, country_code, country_group, gender, cohort_two, age) %>%
+  reframe(
+    total = n(),
+    Total = sum(1 * weight),
+    Employed = sum(outcome * weight),
+    Contr = weighted.mean(outcome, weight = weight),
+    TotalVar = Total * Contr * (1 - Contr),
+    survival = mean(survival),
+    cohort = max(cohort)) %>%
+  unique()
+
+table_wle <- table_wle %>% 
+  mutate(Contr = ifelse(Total > 0, Employed / Total * survival, 0),
+         Sd1   = (Contr * (1 - Contr)) / TotalVar)
+
+table_wle <- table_wle %>% 
+  group_by(country, gender, cohort_two) %>%
+  mutate(projected = 0) %>%
+  complete(age = 55:64) %>%
+  mutate(projected = ifelse(is.na(projected), 1, 0)) %>%
+  arrange(country, gender, age, cohort_two) %>%
+  filter(!is.na(cohort_two))
+
+table_wle <- table_wle %>% group_by(country, gender) %>% fill(names(table_wle), .direction = c("down"))
+
+table_wle <- table_wle %>% 
+  select(country, country_code, country_group, gender, cohort, cohort_two, Contr, Sd1, projected) %>%
+  group_by(country, country_code, country_group, gender, cohort_two) %>% 
+  summarise(WLE = sum(Contr), Var = sum(Sd1), cohort = cohort, projected = projected) %>%
+  filter(cohort == min(cohort)) %>%
+  mutate(low = WLE - 1.96 * sqrt(Var), hig = WLE + 1.96 * sqrt(Var)) %>%
+  unique()
+
+wle_unadjusted <- table_wle %>% ungroup()
+wle_unadjusted$var <- "WLE adjusted for mortality"
+wle_unadjusted_male <- wle_unadjusted %>% filter(projected == 0) %>% rename("wle_unadjusted" = "WLE") %>% select("country", "cohort_two", "gender", "wle_unadjusted") %>% filter(gender == "Male population")
+wle_unadjusted_female <- wle_unadjusted %>% filter(projected == 0) %>% rename("wle_unadjusted" = "WLE") %>% select("country", "cohort_two", "gender", "wle_unadjusted") %>% filter(gender == "Female Population")
+
+```
+
+```{r, warning = F}
+ggplot(table_wle, aes(x = as.factor(cohort_two), y = WLE, group = country_code, country = country_code)) +
+  facet_grid(gender ~ country_group) +
+  geom_point(data = table_wle %>% filter(projected == 0), 
+            aes(x = as.factor(cohort_two), y = WLE, group = country_code, country = country_code),
+            size = 0.3) +
+  geom_ribbon(aes(ymin = low, ymax = hig, alpha = 1)) +
+  geom_line(data = table_wle %>% filter(projected == 0), 
+            aes(x = as.factor(cohort_two), y = WLE, group = country_code, country = country_code),
+            size = 0.3) +
+  geom_line(data = table_wle, 
+            aes(x = as.factor(cohort_two), y = WLE, group = country_code, country = country_code), 
+            size = 0.4, linetype = "dotted") +
+  geom_flag(data = table_wle %>% group_by(country_code, gender) %>% filter(cohort == min(cohort)) %>% slice(1), 
+            aes(x = as.factor(cohort_two), y = WLE, group = country_code, country = country_code), 
+            size = 3) +
+  geom_flag(data = table_wle %>% group_by(country_code, gender) %>% filter(cohort_two == max(cohort_two)), 
+            aes(x = as.factor(cohort_two), y = WLE, group = country_code, country = country_code), 
+            size = 3) +
+  theme_linedraw() +
+  theme(panel.grid.major.x = element_blank(),
+        panel.grid.minor.x = element_blank(),
+        panel.grid.minor.y = element_blank(),
+        strip.text.x = element_text(size = 11),
+        strip.text.y = element_text(size = 11),
+        axis.title.x = element_text(size = 14, face = "bold", colour = "black"), 
+        axis.title.y = element_text(size = 14, face = "bold", colour = "black"),
+        axis.text.x = element_text(size = 9, angle = 45, vjust = 1, hjust = 1, colour = "black"),
+        axis.text.y = element_text(size = 10, colour = "black"),
+        axis.line = element_line(),
+        axis.ticks = element_line(),
+        legend.position = "none") + 
+  guides(x = "axis_minor", y = "axis_minor") +
+  coord_cartesian(ylim = c(0, 8)) +
+  scale_y_continuous("WLE From Age 55 to 64 (in years)", breaks = seq(-10, 10, 1)) +
+  scale_x_discrete("Birth Cohort", labels = c("", "'29/'30", "", "'33/'34", "", "'37/'38", "", "'41/'42", "", "'45/'46", "", "'49/'50", "", "'53/'54", "", "'57/'58", "", "'61/'62", "", "'65/'66")) +
+  scale_alpha(range = c(0.01, 0.1))
+ggsave("outputs/wle_unadjusted_55_64.pdf", width = 9, height = 6)
+
+```
+
+# WLE adjusted for mortality and working hours
+```{r, warning = F}
+table_wle <- data %>% mutate(outcome = ifelse(status == "Employed", 1, 0))
+
+table_wle <- table_wle %>% filter(!is.na(outcome)) %>%
+  group_by(country, country_code, country_group, gender, cohort_two, age) %>%
+  reframe(
+    Total = sum(1 * weight),
+    Employed = sum(outcome * weight),
+    Contr = weighted.mean(outcome, weight = weight),
+    TotalVar = Total * Contr * (1 - Contr),
+    Time = weighted.mean(working_hours_usual, weight = weight, na.rm = T),
+    TimeN = sum(outcome ),
+    TimeSd = sd(working_hours_usual),
+    survival = mean(survival),
+    cohort = min(cohort)) %>%
+  unique()
+
+table_wle <- table_wle %>% 
+  mutate(Time = ifelse(is.na(Time), 0, Time),
+         TimeSd = ifelse(is.na(TimeSd), 0, TimeSd),
+         Time = ifelse(Time > 40, 1, Time / 40),
+         TimeSd = TimeSd / 40)
+
+table_wle <- table_wle %>% 
+  mutate(Contr= ifelse(Total > 0, Employed / Total * Time * survival, 0),
+         Sd1   = (Contr * (1 - Contr)) / TotalVar,
+         Sd2   = ifelse(Time > 0, TimeSd / sqrt(TimeN), 0),
+         Sdt   = Sd1 * Sd2 + Sd1 * Time^2 + Sd2 * Contr)
+
+table_wle <- table_wle %>% 
+  group_by(country, gender, cohort_two) %>%
+  mutate(projected = 0) %>%
+  complete(age = 55:64) %>% 
+  mutate(projected = ifelse(is.na(projected), 1, 0)) %>%
+  arrange(country, gender, age, cohort_two) %>% 
+  filter(!is.na(cohort_two))
+
+table_wle <- table_wle %>% group_by(country, gender) %>% fill(names(table_wle), .direction = c("down"))
+
+table_wle <- table_wle %>% 
+  select(country, country_code, country_group, gender, cohort, cohort_two, Contr, Sd1, projected) %>%
+  group_by(country, country_code, country_group, gender, cohort_two) %>% 
+  summarise(WLE = sum(Contr), Var = sum(Sd1), cohort = cohort, projected = projected) %>%
+  filter(cohort == min(cohort)) %>%
+  mutate(low = WLE - 1.96 * sqrt(Var), hig = WLE + 1.96 * sqrt(Var)) %>%
+  unique()
+
+wle_adjusted <- table_wle %>% ungroup()
+wle_adjusted$var <- "WLE adjusted for mortality and working hours"
+wle_adjusted_male <- wle_adjusted %>% filter(projected == 0) %>% rename("wle_adjusted" = "WLE") %>% select("country", "cohort_two", "gender", "wle_adjusted") %>% filter(gender == "Male population")
+wle_adjusted_female <- wle_adjusted %>% filter(projected == 0) %>% rename("wle_adjusted" = "WLE") %>% select("country", "cohort_two", "gender", "wle_adjusted") %>% filter(gender == "Female Population")
+
+```
+
+```{r, warning = F}
+ggplot(table_wle, aes(x = as.factor(cohort_two), y = WLE, group = country_code, country = country_code)) +
+  facet_grid(gender ~ country_group) +
+  geom_point(data = table_wle %>% filter(projected == 0), 
+            aes(x = as.factor(cohort_two), y = WLE, group = country_code, country = country_code),
+            size = 0.3) +
+  geom_ribbon(aes(ymin = low, ymax = hig, alpha = 1)) +
+  geom_line(data = table_wle %>% filter(projected == 0), 
+            aes(x = as.factor(cohort_two), y = WLE, group = country_code, country = country_code),
+            size = 0.3) +
+  geom_line(data = table_wle, 
+            aes(x = as.factor(cohort_two), y = WLE, group = country_code, country = country_code), 
+            size = 0.4, linetype = "dotted") +
+  geom_flag(data = table_wle %>% group_by(country_code, gender) %>% filter(cohort == min(cohort)) %>% slice(1), 
+            aes(x = as.factor(cohort_two), y = WLE, group = country_code, country = country_code), 
+            size = 3) +
+  geom_flag(data = table_wle %>% group_by(country_code, gender) %>% filter(cohort_two == max(cohort_two)), 
+            aes(x = as.factor(cohort_two), y = WLE, group = country_code, country = country_code), 
+            size = 3) +
+  theme_linedraw() +
+  theme(panel.grid.major.x = element_blank(),
+        panel.grid.minor.x = element_blank(),
+        panel.grid.minor.y = element_blank(),
+        strip.text.x = element_text(size = 11),
+        strip.text.y = element_text(size = 11),
+        axis.title.x = element_text(size = 14, face = "bold", colour = "black"), 
+        axis.title.y = element_text(size = 14, face = "bold", colour = "black"),
+        axis.text.x = element_text(size = 9, angle = 45, vjust = 1, hjust = 1, colour = "black"),
+        axis.text.y = element_text(size = 10, colour = "black"),
+        axis.line = element_line(),
+        axis.ticks = element_line(),
+        legend.position = "none") + 
+  guides(x = "axis_minor", y = "axis_minor") +
+  coord_cartesian(ylim = c(0, 8)) +
+  scale_y_continuous("WLE From Age 55 to 64 (in FTE years)", breaks = seq(-10, 10, 1)) +
+  scale_x_discrete("Birth Cohort", labels = c("", "'29/'30", "", "'33/'34", "", "'37/'38", "", "'41/'42", "", "'45/'46", "", "'49/'50", "", "'53/'54", "", "'57/'58", "", "'61/'62", "", "'65/'66")) +
+  scale_alpha(range = c(0.01, 0.1))
+ggsave("outputs/wle_adjusted_55_64.pdf", width = 9, height = 6)
+
+```
+
+# WYL to retirement adjusted for mortality
+```{r, warning = F}
+table_wle <- data %>% mutate(outcome = ifelse(status == "Retired", 1, 0))
+
+table_wle <- table_wle %>% filter(!is.na(outcome)) %>%
+  group_by(country, country_code, country_group, gender, cohort_two, age) %>%
+  reframe(
+    total = n(),
+    Total = sum(1 * weight),
+    Employed = sum(outcome * weight),
+    Contr = weighted.mean(outcome, weight = weight),
+    TotalVar = Total * Contr * (1 - Contr),
+    survival = mean(survival),
+    cohort = max(cohort)) %>%
+  unique()
+
+table_wle <- table_wle %>% 
+  mutate(Contr = ifelse(Total > 0, Employed / Total * survival, 0),
+         Sd1   = (Contr * (1 - Contr)) / TotalVar)
+
+table_wle <- table_wle %>% 
+  group_by(country, gender, cohort_two) %>%
+  mutate(projected = 0) %>%
+  complete(age = 55:64) %>% 
+  mutate(projected = ifelse(is.na(projected), 1, 0)) %>%
+  arrange(country, gender, age, cohort_two) %>% 
+  filter(!is.na(cohort_two))
+
+table_wle <- table_wle %>% group_by(country, gender) %>% fill(names(table_wle), .direction = c("down"))
+
+table_wle <- table_wle %>% 
+  select(country, country_code, country_group, gender, cohort, cohort_two, Contr, Sd1, projected) %>%
+  group_by(country, country_code, country_group, gender, cohort_two) %>% 
+  summarise(WLE = sum(Contr), Var = sum(Sd1), cohort = cohort, projected = projected) %>%
+  filter(cohort == min(cohort)) %>%
+  mutate(low = WLE - 1.96 * sqrt(Var), hig = WLE + 1.96 * sqrt(Var)) %>%
+  unique()
+
+wyl_retirement <- table_wle %>% ungroup()
+wyl_retirement$var <- "WYL to retirement"
+wyl_retirement_male <- wyl_retirement %>% filter(projected == 0) %>% rename("wyl_retirement" = "WLE") %>% select("country", "cohort_two", "gender", "wyl_retirement") %>% filter(gender == "Male population")
+wyl_retirement_female <- wyl_retirement %>% filter(projected == 0) %>% rename("wyl_retirement" = "WLE") %>% select("country", "cohort_two", "gender", "wyl_retirement") %>% filter(gender == "Female Population")
+
+```
+
+```{r, warning = F}
+ggplot(table_wle, aes(x = as.factor(cohort_two), y = WLE, group = country_code, country = country_code)) +
+  facet_grid(gender ~ country_group) +
+  geom_point(data = table_wle %>% filter(projected == 0), 
+            aes(x = as.factor(cohort_two), y = WLE, group = country_code, country = country_code),
+            size = 0.3) +
+  geom_ribbon(aes(ymin = low, ymax = hig, alpha = 1)) +
+  geom_line(data = table_wle %>% filter(projected == 0), 
+            aes(x = as.factor(cohort_two), y = WLE, group = country_code, country = country_code),
+            size = 0.3) +
+  geom_line(data = table_wle, 
+            aes(x = as.factor(cohort_two), y = WLE, group = country_code, country = country_code), 
+            size = 0.4, linetype = "dotted") +
+  geom_flag(data = table_wle %>% group_by(country_code, gender) %>% filter(cohort == min(cohort)) %>% slice(1), 
+            aes(x = as.factor(cohort_two), y = WLE, group = country_code, country = country_code), 
+            size = 3) +
+  geom_flag(data = table_wle %>% group_by(country_code, gender) %>% filter(cohort_two == max(cohort_two)), 
+            aes(x = as.factor(cohort_two), y = WLE, group = country_code, country = country_code), 
+            size = 3) +
+  theme_linedraw() +
+  theme(panel.grid.major.x = element_blank(),
+        panel.grid.minor.x = element_blank(),
+        panel.grid.minor.y = element_blank(),
+        strip.text.x = element_text(size = 11),
+        strip.text.y = element_text(size = 11),
+        axis.title.x = element_text(size = 14, face = "bold", colour = "black"), 
+        axis.title.y = element_text(size = 14, face = "bold", colour = "black"),
+        axis.text.x = element_text(size = 9, angle = 45, vjust = 1, hjust = 1, colour = "black"),
+        axis.text.y = element_text(size = 10, colour = "black"),
+        axis.line = element_line(),
+        axis.ticks = element_line(),
+        legend.position = "none") + 
+  guides(x = "axis_minor", y = "axis_minor") +
+  coord_cartesian(ylim = c(0, 8)) +
+  scale_y_continuous("WYL From Age 55 to 64 (in years)", breaks = seq(-10, 10, 1)) +
+  scale_x_discrete("Birth Cohort", labels = c("", "'29/'30", "", "'33/'34", "", "'37/'38", "", "'41/'42", "", "'45/'46", "", "'49/'50", "", "'53/'54", "", "'57/'58", "", "'61/'62", "", "'65/'66")) +
+  scale_alpha(range = c(0.01, 0.1))
+ggsave("outputs/wyl_retirement_55_64.pdf", width = 9, height = 6)
+
+```
+
+# WYL to unemployment adjusted for mortality
+```{r, warning = F}
+table_wle <- data %>% mutate(outcome = ifelse(status == "Unemployed", 1, 0))
+
+table_wle <- table_wle %>% filter(!is.na(outcome)) %>%
+  group_by(country, country_code, country_group, gender, cohort_two, age) %>%
+  reframe(
+    total = n(),
+    Total = sum(1 * weight),
+    Employed = sum(outcome * weight),
+    Contr = weighted.mean(outcome, weight = weight),
+    TotalVar = Total * Contr * (1 - Contr),
+    survival = mean(survival),
+    cohort = max(cohort)) %>%
+  unique()
+
+table_wle <- table_wle %>% 
+  mutate(Contr = ifelse(Total > 0, Employed / Total * survival, 0),
+         Sd1   = (Contr * (1 - Contr)) / TotalVar)
+
+table_wle <- table_wle %>% 
+  group_by(country, gender, cohort_two) %>%
+  mutate(projected = 0) %>%
+  complete(age = 55:64) %>% 
+  mutate(projected = ifelse(is.na(projected), 1, 0)) %>%
+  arrange(country, gender, age, cohort_two) %>% 
+  filter(!is.na(cohort_two))
+
+table_wle <- table_wle %>% group_by(country, gender) %>% fill(names(table_wle), .direction = c("down"))
+
+table_wle <- table_wle %>% 
+  select(country, country_code, country_group, gender, cohort, cohort_two, Contr, Sd1, projected) %>%
+  group_by(country, country_code, country_group, gender, cohort_two) %>% 
+  summarise(WLE = sum(Contr), Var = sum(Sd1), cohort = cohort, projected = projected) %>%
+  filter(cohort == min(cohort)) %>%
+  mutate(low = WLE - 1.96 * sqrt(Var), hig = WLE + 1.96 * sqrt(Var)) %>%
+  unique()
+
+wyl_unemployment <- table_wle %>% ungroup()
+wyl_unemployment$var <- "WYL to unemployment"
+wyl_unemployment_male <- wyl_unemployment %>% filter(projected == 0) %>% rename("wyl_unemployment" = "WLE") %>% select("country", "cohort_two", "gender", "wyl_unemployment") %>% filter(gender == "Male population")
+wyl_unemployment_female <- wyl_unemployment %>% filter(projected == 0) %>% rename("wyl_unemployment" = "WLE") %>% select("country", "cohort_two", "gender", "wyl_unemployment") %>% filter(gender == "Female Population")
+
+```
+
+```{r, warning = F}
+ggplot(table_wle, aes(x = as.factor(cohort_two), y = WLE, group = country_code, country = country_code)) +
+  facet_grid(gender ~ country_group) +
+  geom_point(data = table_wle %>% filter(projected == 0), 
+            aes(x = as.factor(cohort_two), y = WLE, group = country_code, country = country_code),
+            size = 0.3) +
+  geom_ribbon(aes(ymin = low, ymax = hig, alpha = 1)) +
+  geom_line(data = table_wle %>% filter(projected == 0), 
+            aes(x = as.factor(cohort_two), y = WLE, group = country_code, country = country_code),
+            size = 0.3) +
+  geom_line(data = table_wle, 
+            aes(x = as.factor(cohort_two), y = WLE, group = country_code, country = country_code), 
+            size = 0.4, linetype = "dotted") +
+  geom_flag(data = table_wle %>% group_by(country_code, gender) %>% filter(cohort == min(cohort)) %>% slice(1), 
+            aes(x = as.factor(cohort_two), y = WLE, group = country_code, country = country_code), 
+            size = 3) +
+  geom_flag(data = table_wle %>% group_by(country_code, gender) %>% filter(cohort_two == max(cohort_two)), 
+            aes(x = as.factor(cohort_two), y = WLE, group = country_code, country = country_code), 
+            size = 3) +
+  theme_linedraw() +
+  theme(panel.grid.major.x = element_blank(),
+        panel.grid.minor.x = element_blank(),
+        panel.grid.minor.y = element_blank(),
+        strip.text.x = element_text(size = 11),
+        strip.text.y = element_text(size = 11),
+        axis.title.x = element_text(size = 14, face = "bold", colour = "black"), 
+        axis.title.y = element_text(size = 14, face = "bold", colour = "black"),
+        axis.text.x = element_text(size = 9, angle = 45, vjust = 1, hjust = 1, colour = "black"),
+        axis.text.y = element_text(size = 10, colour = "black"),
+        axis.line = element_line(),
+        axis.ticks = element_line(),
+        legend.position = "none") + 
+  guides(x = "axis_minor", y = "axis_minor") +
+  coord_cartesian(ylim = c(0, 8)) +
+  scale_y_continuous("WYL From Age 55 to 64 (in years)", breaks = seq(-10, 10, 1)) +
+  scale_x_discrete("Birth Cohort", labels = c("", "'29/'30", "", "'33/'34", "", "'37/'38", "", "'41/'42", "", "'45/'46", "", "'49/'50", "", "'53/'54", "", "'57/'58", "", "'61/'62", "", "'65/'66")) +
+  scale_alpha(range = c(0.01, 0.1))
+ggsave("outputs/wyl_unemployment_55_64.pdf", width = 9, height = 6)
+
+```
+
+# WYL to inactivity adjusted for mortality
+```{r, warning = F}
+table_wle <- data %>% mutate(outcome = ifelse(status %in% c("Ill health", "Other"), 1, 0))
+
+table_wle <- table_wle %>% filter(!is.na(outcome)) %>%
+  group_by(country, country_code, country_group, gender, cohort_two, age) %>%
+  reframe(
+    total = n(),
+    Total = sum(1 * weight),
+    Employed = sum(outcome * weight),
+    Contr = weighted.mean(outcome, weight = weight),
+    TotalVar = Total * Contr * (1 - Contr),
+    survival = mean(survival),
+    cohort = max(cohort)) %>%
+  unique()
+
+table_wle <- table_wle %>% 
+  mutate(Contr = ifelse(Total > 0, Employed / Total * survival, 0),
+         Sd1   = (Contr * (1 - Contr)) / TotalVar)
+
+table_wle <- table_wle %>% 
+  group_by(country, gender, cohort_two) %>%
+  mutate(projected = 0) %>%
+  complete(age = 55:64) %>% 
+  mutate(projected = ifelse(is.na(projected), 1, 0)) %>%
+  arrange(country, gender, age, cohort_two) %>% 
+  filter(!is.na(cohort_two))
+
+table_wle <- table_wle %>% group_by(country, gender) %>% fill(names(table_wle), .direction = c("down"))
+
+table_wle <- table_wle %>% 
+  select(country, country_code, country_group, gender, cohort, cohort_two, Contr, Sd1, projected) %>%
+  group_by(country, country_code, country_group, gender, cohort_two) %>% 
+  summarise(WLE = sum(Contr), Var = sum(Sd1), cohort = cohort, projected = projected) %>%
+  filter(cohort == min(cohort)) %>%
+  mutate(low = WLE - 1.96 * sqrt(Var), hig = WLE + 1.96 * sqrt(Var)) %>%
+  unique()
+
+wyl_inactivity <- table_wle %>% ungroup()
+wyl_inactivity$var <- "WYL to inactivity"
+wyl_inactivity_male <- wyl_inactivity %>% filter(projected == 0) %>% rename("wyl_inactivity" = "WLE") %>% select("country", "cohort_two", "gender", "wyl_inactivity") %>% filter(gender == "Male population")
+wyl_inactivity_female <- wyl_inactivity %>% filter(projected == 0) %>% rename("wyl_inactivity" = "WLE") %>% select("country", "cohort_two", "gender", "wyl_inactivity") %>% filter(gender == "Female Population")
+
+```
+
+```{r, warning = F}
+ggplot(table_wle, aes(x = as.factor(cohort_two), y = WLE, group = country_code, country = country_code)) +
+  facet_grid(gender ~ country_group) +
+  geom_point(data = table_wle %>% filter(projected == 0), 
+            aes(x = as.factor(cohort_two), y = WLE, group = country_code, country = country_code),
+            size = 0.3) +
+  geom_ribbon(aes(ymin = low, ymax = hig, alpha = 1)) +
+  geom_line(data = table_wle %>% filter(projected == 0), 
+            aes(x = as.factor(cohort_two), y = WLE, group = country_code, country = country_code),
+            size = 0.3) +
+  geom_line(data = table_wle, 
+            aes(x = as.factor(cohort_two), y = WLE, group = country_code, country = country_code), 
+            size = 0.4, linetype = "dotted") +
+  geom_flag(data = table_wle %>% group_by(country_code, gender) %>% filter(cohort == min(cohort)) %>% slice(1), 
+            aes(x = as.factor(cohort_two), y = WLE, group = country_code, country = country_code), 
+            size = 3) +
+  geom_flag(data = table_wle %>% group_by(country_code, gender) %>% filter(cohort_two == max(cohort_two)), 
+            aes(x = as.factor(cohort_two), y = WLE, group = country_code, country = country_code), 
+            size = 3) +
+  theme_linedraw() +
+  theme(panel.grid.major.x = element_blank(),
+        panel.grid.minor.x = element_blank(),
+        panel.grid.minor.y = element_blank(),
+        strip.text.x = element_text(size = 11),
+        strip.text.y = element_text(size = 11),
+        axis.title.x = element_text(size = 14, face = "bold", colour = "black"), 
+        axis.title.y = element_text(size = 14, face = "bold", colour = "black"),
+        axis.text.x = element_text(size = 9, angle = 45, vjust = 1, hjust = 1, colour = "black"),
+        axis.text.y = element_text(size = 10, colour = "black"),
+        axis.line = element_line(),
+        axis.ticks = element_line(),
+        legend.position = "none") + 
+  guides(x = "axis_minor", y = "axis_minor") +
+  coord_cartesian(ylim = c(0, 8)) +
+  scale_y_continuous("WYL From Age 55 to 64 (in years)", breaks = seq(-10, 10, 1)) +
+  scale_x_discrete("Birth Cohort", labels = c("", "'29/'30", "", "'33/'34", "", "'37/'38", "", "'41/'42", "", "'45/'46", "", "'49/'50", "", "'53/'54", "", "'57/'58", "", "'61/'62", "", "'65/'66")) +
+  scale_alpha(range = c(0.01, 0.1))
+ggsave("outputs/wyl_inactivity_55_64.pdf", width = 9, height = 6)
+
+```
+
+```{r}
+
+```

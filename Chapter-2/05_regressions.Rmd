@@ -1,0 +1,263 @@
+---
+title: '03_analysis_wle'
+---
+
+```{r setup}
+library("tidyverse")
+
+options("scipen" = 100, "digits" = 4)
+
+rm(list = ls())
+
+set.seed(1)
+
+load("outputs/data_final_55_64.RData")
+
+```
+
+```{r, warning = F}
+
+estimates = data.frame()
+
+bs_iterations = 1000
+
+for (i in 1:bs_iterations) {
+  
+  # draw countries with replacement
+  bs_sample <- sample(unique(data$country), replace = T)
+
+  bs_sample <- bs_sample %>% as.data.frame() %>% rename("country" = ".")
+  bs_sample$country_id <- paste(bs_sample$country, row(bs_sample), sep = "_")
+  bs_sample <- bs_sample %>% left_join(data, by = "country")
+
+  # draw observations from countries with replacement
+  bs_sample <- bs_sample %>% group_by(country_id) %>% sample_n(n(), replace = T)
+  
+  # WLE adjusted for mortality
+  wle_unadj <- bs_sample %>% 
+    mutate(outcome = ifelse(status == "Employed", 1, 0)) %>% 
+    filter(!is.na(outcome)) %>%
+    group_by(country_id, gender, cohort_two, age) %>%
+    reframe(
+      total = n(),
+      Total = sum(1 * weight, na.rm = T),
+      Employed = sum(outcome * weight, na.rm = T),
+      Contr = weighted.mean(outcome, weight = weight, na.rm = T),
+      TotalVar = Total * Contr * (1 - Contr),
+      survival = mean(survival, na.rm = T),
+      cohort = max(cohort)) %>% unique() %>% 
+    mutate(Contr = ifelse(Total > 0, Employed / Total * survival, 0),
+           Sd1   = (Contr * (1 - Contr)) / TotalVar) %>% 
+    group_by(country_id, gender, cohort_two) %>%
+    filter(n() == 10) %>%
+    select(country_id, gender, cohort, cohort_two, Contr, Sd1) %>%
+    group_by(country_id, gender, cohort_two) %>% 
+    summarise(wle_unadj = sum(Contr), cohort = cohort) %>%
+    filter(cohort == min(cohort)) %>%
+    unique() %>% na.omit() %>%
+    select(country_id, gender, cohort_two, wle_unadj)
+
+  # WLE adjusted for mortality and working hours
+  wle_adj <- bs_sample %>% 
+    mutate(outcome = ifelse(status == "Employed", 1, 0)) %>% 
+    filter(!is.na(outcome)) %>%
+    group_by(country_id, gender, cohort_two, age) %>%
+    reframe(
+      Total = sum(1 * weight, na.rm = T),
+      Employed = sum(outcome * weight, na.rm = T),
+      Contr = weighted.mean(outcome, weight = weight, na.rm = T),
+      TotalVar = Total * Contr * (1 - Contr),
+      Time = weighted.mean(working_hours_usual, weight = weight, na.rm = T),
+      TimeN = sum(outcome, na.rm = T ),
+      TimeSd = sd(working_hours_usual, na.rm = T),
+      survival = mean(survival, na.rm = T),
+      cohort = min(cohort)) %>%
+    unique() %>% 
+    group_by(country_id, gender, cohort_two) %>%
+    filter(n() == 10) %>%
+    mutate(Time = ifelse(is.na(Time), 0, Time),
+           TimeSd = ifelse(is.na(TimeSd), 0, TimeSd),
+           Time = ifelse(Time > 40, 1, Time / 40),
+           TimeSd = TimeSd / 40,
+           Contr = ifelse(Total > 0, Employed / Total * Time * survival, 0),
+           Sd1   = (Contr * (1 - Contr)) / TotalVar,
+           Sd2   = ifelse(Time > 0, TimeSd / sqrt(TimeN), 0),
+           Sdt   = Sd1 * Sd2 + Sd1 * Time^2 + Sd2 * Contr) %>% 
+    select(country_id, gender, cohort, cohort_two, Contr, Sd1) %>%
+    group_by(country_id, gender, cohort_two) %>% 
+    summarise(wle_adj = sum(Contr), cohort = cohort) %>%
+    filter(cohort == min(cohort)) %>%
+    unique() %>% na.omit() %>%
+    select(country_id, gender, cohort_two, wle_adj)
+  
+  # WYL to retirement adjusted for mortality
+  wyl_retire <- bs_sample %>% 
+    mutate(outcome = ifelse(status == "Retired", 1, 0)) %>% 
+    filter(!is.na(outcome)) %>%
+    group_by(country_id, gender, cohort_two, age) %>%
+    reframe(
+      total = n(),
+      Total = sum(1 * weight, na.rm = T),
+      Employed = sum(outcome * weight, na.rm = T),
+      Contr = weighted.mean(outcome, weight = weight, na.rm = T),
+      TotalVar = Total * Contr * (1 - Contr),
+      survival = mean(survival, na.rm = T),
+      cohort = max(cohort)) %>% unique() %>% 
+    mutate(Contr = ifelse(Total > 0, Employed / Total * survival, 0),
+           Sd1   = (Contr * (1 - Contr)) / TotalVar) %>% 
+    group_by(country_id, gender, cohort_two) %>%
+    filter(n() == 10) %>%
+    select(country_id, gender, cohort, cohort_two, Contr, Sd1) %>%
+    group_by(country_id, gender, cohort_two) %>% 
+    summarise(wyl_retire = sum(Contr), cohort = cohort) %>%
+    filter(cohort == min(cohort)) %>%
+    unique() %>% na.omit() %>%
+    select(country_id, gender, cohort_two, wyl_retire)
+  
+  # WYL to unemployment adjusted for mortality
+  wyl_unemp <- bs_sample %>% 
+    mutate(outcome = ifelse(status == "Unemployed", 1, 0)) %>% 
+    filter(!is.na(outcome)) %>%
+    group_by(country_id, gender, cohort_two, age) %>%
+    reframe(
+      total = n(),
+      Total = sum(1 * weight, na.rm = T),
+      Employed = sum(outcome * weight, na.rm = T),
+      Contr = weighted.mean(outcome, weight = weight, na.rm = T),
+      TotalVar = Total * Contr * (1 - Contr),
+      survival = mean(survival, na.rm = T),
+      cohort = max(cohort)) %>% unique() %>% 
+    mutate(Contr = ifelse(Total > 0, Employed / Total * survival, 0),
+           Sd1   = (Contr * (1 - Contr)) / TotalVar) %>% 
+    group_by(country_id, gender, cohort_two) %>%
+    filter(n() == 10) %>%
+    select(country_id, gender, cohort, cohort_two, Contr, Sd1) %>%
+    group_by(country_id, gender, cohort_two) %>% 
+    summarise(wyl_unemp = sum(Contr), cohort = cohort) %>%
+    filter(cohort == min(cohort)) %>%
+    unique() %>% na.omit() %>%
+    select(country_id, gender, cohort_two, wyl_unemp)
+  
+  # WYL to inactivity adjusted for mortality
+  wyl_inact <- bs_sample %>% 
+    mutate(outcome = ifelse(status %in% c("Ill health", "Other"), 1, 0)) %>% 
+    filter(!is.na(outcome)) %>%
+    group_by(country_id, gender, cohort_two, age) %>%
+    reframe(
+      total = n(),
+      Total = sum(1 * weight, na.rm = T),
+      Employed = sum(outcome * weight, na.rm = T),
+      Contr = weighted.mean(outcome, weight = weight, na.rm = T),
+      TotalVar = Total * Contr * (1 - Contr),
+      survival = mean(survival, na.rm = T),
+      cohort = max(cohort)) %>% unique() %>% 
+    mutate(Contr = ifelse(Total > 0, Employed / Total * survival, 0),
+           Sd1   = (Contr * (1 - Contr)) / TotalVar) %>% 
+    group_by(country_id, gender, cohort_two) %>%
+    filter(n() == 10) %>%
+    select(country_id, gender, cohort, cohort_two, Contr, Sd1) %>%
+    group_by(country_id, gender, cohort_two) %>% 
+    summarise(wyl_inact = sum(Contr), cohort = cohort) %>%
+    filter(cohort == min(cohort)) %>%
+    unique() %>% na.omit() %>%
+    select(country_id, gender, cohort_two, wyl_inact)
+  
+  # combine wle and wyl estimates in a final data frame
+  cohorts <- unique(wle_adj$cohort_two)
+
+  final_frame <- wle_adj %>%
+    select(country_id, gender, cohort_two, wle_adj) %>% 
+    left_join(wle_unadj, by = c("country_id", "gender", "cohort_two")) %>% 
+    left_join(wyl_retire, by = c("country_id", "gender", "cohort_two")) %>% 
+    left_join(wyl_unemp, by = c("country_id", "gender", "cohort_two")) %>% 
+    left_join(wyl_inact, by = c("country_id", "gender", "cohort_two")) %>% 
+    group_by(country_id, gender) %>% complete(cohort_two = cohorts)
+  
+  final_frame <- final_frame %>%
+    group_by(country_id, gender) %>%
+    mutate(
+      wle_unadj_lag = dplyr::lag(wle_unadj, 1),
+      wle_unadj_change = wle_unadj - wle_unadj_lag,
+      wle_adj_lag = dplyr::lag(wle_adj, 1),
+      wle_adj_change = wle_adj - wle_adj_lag,
+      wyl_retire_lag = dplyr::lag(wyl_retire, 1),
+      wyl_retire_change = wyl_retire - wyl_retire_lag,
+      wyl_unemp_lag = dplyr::lag(wyl_unemp, 1),
+      wyl_unemp_change = wyl_unemp - wyl_unemp_lag,
+      wyl_inact_lag = dplyr::lag(wyl_inact, 1),
+      wyl_inact_change = wyl_inact - wyl_inact_lag) %>%
+    na.omit()
+  
+  # run models
+  coef_wle_adj_f <- lm(wle_adj_change ~ wle_unadj_change + wle_adj_lag + country_id + cohort_two,
+                         data = final_frame %>% filter(gender == "Female population"))
+  
+  coef_wle_adj_m <- lm(wle_adj_change ~ wle_unadj_change + wle_adj_lag + country_id + cohort_two,
+                         data = final_frame %>% filter(gender == "Male population"))
+  
+  coef_wyl_retire_f <- lm(wyl_retire_change ~ wle_unadj_change + wyl_retire_lag + country_id + cohort_two,
+                         data = final_frame %>% filter(gender == "Female population"))
+  
+  coef_wyl_retire_m <- lm(wyl_retire_change ~ wle_unadj_change + wyl_retire_lag + country_id + cohort_two,
+                         data = final_frame %>% filter(gender == "Male population"))
+  
+  coef_wyl_unemp_f <- lm(wyl_unemp_change ~ wle_unadj_change + wyl_unemp_lag + country_id + cohort_two,
+                         data = final_frame %>% filter(gender == "Female population"))
+  
+  coef_wyl_unemp_m <- lm(wyl_unemp_change ~ wle_unadj_change + wyl_unemp_lag + country_id + cohort_two,
+                         data = final_frame %>% filter(gender == "Male population"))
+  
+  coef_wyl_inact_f <- lm(wyl_inact_change ~ wle_unadj_change + wyl_inact_lag + country_id + cohort_two,
+                         data = final_frame %>% filter(gender == "Female population"))
+  
+  coef_wyl_inact_m <- lm(wyl_inact_change ~ wle_unadj_change + wyl_inact_lag + country_id + cohort_two,
+                         data = final_frame %>% filter(gender == "Male population"))
+
+  # gather estimates
+  model <- data.frame(coef_wle_adj_f$coefficients[2], 
+                      coef_wle_adj_m$coefficients[2],
+                      coef_wyl_retire_f$coefficients[2], 
+                      coef_wyl_retire_m$coefficients[2],
+                      coef_wyl_unemp_f$coefficients[2], 
+                      coef_wyl_unemp_m$coefficients[2],
+                      coef_wyl_inact_f$coefficients[2], 
+                      coef_wyl_inact_m$coefficients[2],i)
+  
+  colnames(model) <- c("coef_wle_adj_f", "coef_wle_adj_m", "coef_wyl_retire_f", "coef_wyl_retire_m", "coef_wyl_unemp_f", "coef_wyl_unemp_m", "coef_wyl_inact_f", "coef_wyl_inact_m", "bs_iteration")
+  
+  estimates <- rbind(estimates, model)
+  
+  print(i)
+
+}
+
+rm(list = setdiff(ls(), c("estimates")))
+
+```
+
+
+```{r, warning = F}
+estimates %>%
+  pivot_longer(cols = 1:8) %>%
+  group_by(name) %>%
+  summarise(
+      name = name,
+      se = round(sd(value), 3),
+      est = round(mean(value), 3),
+      conf_lower_999 = est - 3.291 * se, conf_higher_999 = est + 3.291 * se,
+      conf_lower_99 = est - 2.576 * se, conf_higher_99 = est + 2.576 * se,
+      conf_lower_95 = est - 1.960 * se, conf_higher_95 = est + 1.960 * se,
+      conf_lower_90 = est - 1.645 * se, conf_higher_90 = est + 1.645 * se,
+      sig = case_when(
+        conf_lower_999 > 0 & conf_higher_999 > 0 | conf_lower_999 < 0 & conf_higher_999 < 0  ~ "***",
+        conf_lower_99 > 0 & conf_higher_99 > 0 | conf_lower_99 < 0 & conf_higher_99 < 0  ~ "**",
+        conf_lower_95 > 0 & conf_higher_95 > 0 | conf_lower_95 < 0 & conf_higher_95 < 0  ~ "*",
+        conf_lower_90 > 0 & conf_higher_90 > 0 | conf_lower_90 < 0 & conf_higher_90 < 0  ~ "+",
+        T ~ "")) %>% unique() %>%
+  select(name, est, se, sig, conf_lower_999, conf_higher_999, conf_lower_99, conf_higher_99, conf_lower_95, conf_higher_95, conf_lower_90, conf_higher_90)
+
+```
+
+```{r}
+
+```

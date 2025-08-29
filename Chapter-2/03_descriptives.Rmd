@@ -1,0 +1,523 @@
+---
+title: 'Descriptive statistics for both age groups'
+author: 'Jan Einhoff'
+date: '15/12/2023'
+---
+
+```{r setup}
+library(tidyverse)
+library(openxlsx)
+library(rio)
+
+options("scipen" = 100, "digits" = 4)
+
+```
+
+```{r, warning = F}
+rm(list = ls())
+
+load(".../data_final_55_64.RData")
+
+data_55_64 <- data
+
+load(".../data_final_65_74.RData")
+
+data_65_74 <- data
+
+rm(data)
+
+```
+
+# Observation counts in cohorts
+```{r}
+table_55_64 <- table(data_55_64$country, data_55_64$cohort_two) %>% as.data.frame() %>% pivot_wider(names_from = Var2, values_from = Freq)
+
+write.xlsx(table_55_64, "table_55_64.xlsx")
+
+table_65_74 <- table(data_65_74$country, data_65_74$cohort_two) %>% as.data.frame() %>% pivot_wider(names_from = Var2, values_from = Freq)
+
+write.xlsx(table_65_74, "table_65_74.xlsx")
+
+rm(table_55_64, table_65_74)
+
+```
+
+# Survey years
+```{r}
+table_55_64 <- table(data_55_64$country, data_55_64$year) %>% as.data.frame() %>% pivot_wider(names_from = Var2, values_from = Freq)
+
+write.xlsx(table_55_64, "table_55_64.xlsx")
+
+table_65_74 <- table(data_65_74$country, data_65_74$year) %>% as.data.frame() %>% pivot_wider(names_from = Var2, values_from = Freq)
+
+write.xlsx(table_65_74, "table_65_74.xlsx")
+
+rm(table_55_64, table_65_74)
+
+```
+
+# Cohorts
+```{r}
+table_55_64 <- table(data_55_64$country, data_55_64$cohort) %>% as.data.frame() %>% filter(Freq != 0) %>% 
+  group_by(Var1) %>% 
+  filter(as.numeric(Var2) == min(as.numeric(Var2)) | as.numeric(Var2) == max(as.numeric(Var2)))
+
+table_65_74 <- table(data_65_74$country, data_65_74$cohort) %>% as.data.frame() %>% filter(Freq != 0) %>% 
+  group_by(Var1) %>% 
+  filter(as.numeric(Var2) == min(as.numeric(Var2)) | as.numeric(Var2) == max(as.numeric(Var2)))
+
+rm(table_55_64, table_65_74)
+
+```
+
+# Country observations
+```{r}
+table(data_55_64$cohort, data_55_64$country)
+
+```
+
+# Cohorts
+```{r}
+
+```
+
+# % with any missing
+```{r}
+table <- data_55_64 %>%
+  group_by(country, gender) %>%
+  mutate(missing_wh = ifelse(status == "Employed" & working_hours == 0, 1, 0)) %>%
+  mutate(missing = ifelse(is.na(status) | missing_wh == 1, 1, 0)) %>%
+  summarise(missing = sum(missing, na.rm = T) / n() * 100)
+
+write.xlsx(table, "data_55_64.xlsx")
+
+```
+
+# % with missing activity status
+```{r}
+table <- data_65_74 %>%
+  group_by(country) %>%
+  mutate(missing = ifelse(is.na(status), 1, 0)) %>%
+  summarise(missing = sum(missing) / n() * 100)
+
+rm(table)
+
+```
+
+# % with missing working hours
+```{r}
+table <- data_65_74 %>%
+  group_by(country) %>%
+  mutate(missing_wh = ifelse(status == "Employed" & is.na(working_hours_usual), 1, 0)) %>%
+  summarise(missing = sum(missing_wh, na.rm = T) / n() * 100)
+
+rm(table)
+
+```
+
+```{r, warning = F}
+rm(list = ls())
+
+load(".../data_final_55_64.RData")
+
+data_55_64 <- data
+
+load(".../data_final_65_74.RData")
+
+data_65_74 <- data
+
+rm(data)
+
+data <- data_55_64 %>% bind_rows(data_65_74)
+
+```
+
+```{r, warning = F}
+data <- data %>%
+  mutate(
+    country = case_when(
+      country %in% c("AT") ~ "Austria",
+      country %in% c("BE") ~ "Belgium",
+      country %in% c("BG") ~ "Bulgaria",
+      country %in% c("CH") ~ "Switzerland",
+      country %in% c("DE") ~ "Germany",
+      country %in% c("DK") ~ "Denmark",
+      country %in% c("EE") ~ "Estonia",
+      country %in% c("EL") ~ "Greece",
+      country %in% c("ES") ~ "Spain",
+      country %in% c("FI") ~ "Finland",
+      country %in% c("FR") ~ "France",
+      country %in% c("HU") ~ "Hungary",
+      country %in% c("IT") ~ "Italy",
+      country %in% c("LT") ~ "Lithuania",
+      country %in% c("LV") ~ "Latvia",
+      country %in% c("NO") ~ "Norway",
+      country %in% c("PL") ~ "Poland",
+      country %in% c("PT") ~ "Portugal",
+      country %in% c("SE") ~ "Sweden",
+      country %in% c("SI") ~ "Slovenia",
+      country %in% c("UK") ~ "United Kingdom")) %>% filter(!is.na(country))
+
+```
+
+# Survival rates
+```{r, warning = F}
+
+table_whours <- data %>% 
+  group_by(country, country_code, country_group, gender, cohort_two, age) %>%
+  reframe(survival = mean(survival)) %>%
+  unique()
+
+t <- table_whours %>% filter(country == "Lithuania")
+
+ggplot(table_whours %>% filter(gender == "Female population"), aes(x = age, y = survival, color = cohort_two, group = cohort_two)) +
+  facet_wrap(country ~ ., ncol = 4) +
+  geom_vline(xintercept = 65, linetype = "dashed") +
+  geom_line() +
+  scale_color_discrete(name = "Birth Cohort") +
+  theme_linedraw() +
+  theme(panel.grid.minor.x = element_blank(),
+        panel.grid.minor.y = element_blank(),
+        strip.text.x = element_text(size = 9),
+        axis.title.x = element_text(size = 12, face = "bold", colour = "black"), 
+        axis.title.y = element_text(size = 12, face = "bold", colour = "black"),
+        axis.text.x = element_text(size = 9, angle = 45, vjust = 1, hjust = 1, colour = "black"),
+        axis.text.y = element_text(size = 9, colour = "black"),
+        axis.line = element_line(),
+        axis.ticks = element_line(),
+        legend.text = element_text(size = 9, colour = "black"),
+        legend.title = element_text(size = 12, face = "bold", colour = "black"),
+        legend.position = "right") +
+  scale_x_continuous("Age", breaks = c(seq(55, 74, 5), 75)) +
+  scale_y_continuous("Survival Rate (In %)", labels = scales::percent) +
+  coord_cartesian(xlim = c(55, 75), ylim = c(0.5, 1))
+ggsave("survival_rate_fem.pdf", height = 8, width = 7)
+
+ggplot(table_whours %>% filter(gender == "Male population"), aes(x = age, y = survival, color = cohort_two, group = cohort_two)) +
+  facet_wrap(country ~ ., ncol = 4) +
+  geom_vline(xintercept = 65, linetype = "dashed") +
+  geom_line() +
+  scale_color_discrete(name = "Birth Cohort") +
+  theme_linedraw() +
+  theme(panel.grid.minor.x = element_blank(),
+        panel.grid.minor.y = element_blank(),
+        strip.text.x = element_text(size = 9),
+        axis.title.x = element_text(size = 12, face = "bold", colour = "black"), 
+        axis.title.y = element_text(size = 12, face = "bold", colour = "black"),
+        axis.text.x = element_text(size = 9, angle = 45, vjust = 1, hjust = 1, colour = "black"),
+        axis.text.y = element_text(size = 9, colour = "black"),
+        axis.line = element_line(),
+        axis.ticks = element_line(),
+        legend.text = element_text(size = 9, colour = "black"),
+        legend.title = element_text(size = 12, face = "bold", colour = "black"),
+        legend.position = "right") +
+  scale_x_continuous("Age", breaks = c(seq(55, 74, 5), 75)) +
+  scale_y_continuous("Survival Rate (In %)", labels = scales::percent) +
+  coord_cartesian(xlim = c(55, 75), ylim = c(0.5, 1))
+ggsave("survival_rate_mal.pdf", height = 8, width = 7)
+
+```
+
+# Average working hours
+```{r, warning = F}
+
+table_whours <- data %>%
+  group_by(country, country_code, country_group, gender, cohort_two, age) %>%
+  reframe(Time = weighted.mean(working_hours_usual, weight = weight, na.rm = T),
+          Time = ifelse(is.na(Time), 0, Time),
+          Time = ifelse(Time > 40, 1, Time / 40)) %>%
+  unique()
+
+ggplot(table_whours %>% filter(gender == "Female population"), aes(x = age, y = Time, color = cohort_two, group = cohort_two)) +
+  facet_wrap(country ~ ., ncol = 4) +
+  geom_vline(xintercept = 65, linetype = "dashed") +
+  geom_line() +
+  scale_color_discrete(name = "Birth Cohort") +
+  theme_linedraw() +
+  theme(panel.grid.minor.x = element_blank(),
+        panel.grid.minor.y = element_blank(),
+        strip.text.x = element_text(size = 9),
+        axis.title.x = element_text(size = 12, face = "bold", colour = "black"), 
+        axis.title.y = element_text(size = 12, face = "bold", colour = "black"),
+        axis.text.x = element_text(size = 9, angle = 45, vjust = 1, hjust = 1, colour = "black"),
+        axis.text.y = element_text(size = 9, colour = "black"),
+        axis.line = element_line(),
+        axis.ticks = element_line(),
+        legend.text = element_text(size = 9, colour = "black"),
+        legend.title = element_text(size = 12, face = "bold", colour = "black"),
+        legend.position = "right") +
+  scale_x_continuous("Age", breaks = c(seq(55, 74, 5), 75)) +
+  scale_y_continuous("Average Normalised Working Hours") +
+  coord_cartesian(xlim = c(55, 75), ylim = c(0, 1))
+ggsave("working_hours_fem.pdf", height = 8, width = 7)
+
+ggplot(table_whours %>% filter(gender == "Male population"), aes(x = age, y = Time, color = cohort_two, group = cohort_two)) +
+  facet_wrap(country ~ ., ncol = 4) +
+  geom_vline(xintercept = 65, linetype = "dashed") +
+  geom_line() +
+  scale_color_discrete(name = "Birth Cohort") +
+  theme_linedraw() +
+  theme(panel.grid.minor.x = element_blank(),
+        panel.grid.minor.y = element_blank(),
+        strip.text.x = element_text(size = 9),
+        axis.title.x = element_text(size = 12, face = "bold", colour = "black"), 
+        axis.title.y = element_text(size = 12, face = "bold", colour = "black"),
+        axis.text.x = element_text(size = 9, angle = 45, vjust = 1, hjust = 1, colour = "black"),
+        axis.text.y = element_text(size = 9, colour = "black"),
+        axis.line = element_line(),
+        axis.ticks = element_line(),
+        legend.text = element_text(size = 9, colour = "black"),
+        legend.title = element_text(size = 12, face = "bold", colour = "black"),
+        legend.position = "right") +
+  scale_x_continuous("Age", breaks = c(seq(55, 74, 5), 75)) +
+  scale_y_continuous("Average Normalised Working Hours") +
+  coord_cartesian(xlim = c(55, 75), ylim = c(0, 1))
+ggsave("working_hours_mal.pdf", height = 8, width = 7)
+
+```
+
+
+
+# Prevalence of employment
+```{r}
+table_age_out <- data %>% mutate(outcome = ifelse(status == "Employed", 1, 0))
+
+table_age_out <- table_age_out %>%
+  group_by(country, country_code, country_group, gender, cohort_two, age) %>%
+  reframe(
+    total = sum(weight, na.rm = T),
+    outcome = sum(outcome * weight, na.rm = T),
+    outcome_rate = outcome / total) %>%
+  unique()
+
+ggplot(table_age_out %>% filter(gender == "Male population"), aes(x = age, y = outcome_rate, color = cohort_two, group = cohort_two)) +
+  facet_wrap(country ~ ., ncol = 4) +
+  geom_vline(xintercept = 65, linetype = "dashed") +
+  geom_line() +
+  scale_color_discrete(name = "Birth Cohort") +
+  theme_linedraw() +
+  theme(panel.grid.minor.x = element_blank(),
+        panel.grid.minor.y = element_blank(),
+        strip.text.x = element_text(size = 9),
+        axis.title.x = element_text(size = 12, face = "bold", colour = "black"), 
+        axis.title.y = element_text(size = 12, face = "bold", colour = "black"),
+        axis.text.x = element_text(size = 9, angle = 45, vjust = 1, hjust = 1, colour = "black"),
+        axis.text.y = element_text(size = 9, colour = "black"),
+        axis.line = element_line(),
+        axis.ticks = element_line(),
+        legend.text = element_text(size = 9, colour = "black"),
+        legend.title = element_text(size = 12, face = "bold", colour = "black"),
+        legend.position = "right") +
+  scale_x_continuous("Age", breaks = c(seq(55, 74, 5), 75)) +
+  scale_y_continuous("Prelvance (In %)", labels = scales::percent) +
+  coord_cartesian(xlim = c(55, 75), ylim = c(0, 1))
+ggsave("prevalence_employment_mal.pdf", height = 8, width = 7)
+
+ggplot(table_age_out %>% filter(gender == "Female population"), aes(x = age, y = outcome_rate, color = cohort_two, group = cohort_two)) +
+  facet_wrap(country ~ ., ncol = 4) +
+  geom_vline(xintercept = 65, linetype = "dashed") +
+  geom_line() +
+  scale_color_discrete(name = "Birth Cohort") +
+  theme_linedraw() +
+  theme(panel.grid.minor.x = element_blank(),
+        panel.grid.minor.y = element_blank(),
+        strip.text.x = element_text(size = 9),
+        axis.title.x = element_text(size = 12, face = "bold", colour = "black"), 
+        axis.title.y = element_text(size = 12, face = "bold", colour = "black"),
+        axis.text.x = element_text(size = 9, angle = 45, vjust = 1, hjust = 1, colour = "black"),
+        axis.text.y = element_text(size = 9, colour = "black"),
+        axis.line = element_line(),
+        axis.ticks = element_line(),
+        legend.text = element_text(size = 9, colour = "black"),
+        legend.title = element_text(size = 12, face = "bold", colour = "black"),
+        legend.position = "right") +
+  scale_x_continuous("Age", breaks = c(seq(55, 74, 5), 75)) +
+  scale_y_continuous("Prelvance (In %)", labels = scales::percent) +
+  coord_cartesian(xlim = c(55, 75), ylim = c(0, 1))
+ggsave("prevalence_employment_fem.pdf", height = 8, width = 7)
+
+```
+
+# Prevalence of unemployment
+```{r}
+table_age_out <- data %>% mutate(outcome = ifelse(status == "Unemployed", 1, 0))
+
+table_age_out <- table_age_out %>%
+  group_by(country, country_code, country_group, gender, cohort_two, age) %>%
+  reframe(
+    total = sum(weight, na.rm = T),
+    outcome = sum(outcome * weight, na.rm = T),
+    outcome_rate = outcome / total) %>%
+  unique()
+
+ggplot(table_age_out %>% filter(gender == "Male population"), aes(x = age, y = outcome_rate, color = cohort_two, group = cohort_two)) +
+  facet_wrap(country ~ ., ncol = 4) +
+  geom_vline(xintercept = 65, linetype = "dashed") +
+  geom_line() +
+  scale_color_discrete(name = "Birth Cohort") +
+  theme_linedraw() +
+  theme(panel.grid.minor.x = element_blank(),
+        panel.grid.minor.y = element_blank(),
+        strip.text.x = element_text(size = 9),
+        axis.title.x = element_text(size = 12, face = "bold", colour = "black"), 
+        axis.title.y = element_text(size = 12, face = "bold", colour = "black"),
+        axis.text.x = element_text(size = 9, angle = 45, vjust = 1, hjust = 1, colour = "black"),
+        axis.text.y = element_text(size = 9, colour = "black"),
+        axis.line = element_line(),
+        axis.ticks = element_line(),
+        legend.text = element_text(size = 9, colour = "black"),
+        legend.title = element_text(size = 12, face = "bold", colour = "black"),
+        legend.position = "right") +
+  scale_x_continuous("Age", breaks = c(seq(55, 74, 5), 75)) +
+  scale_y_continuous("Prelvance (In %)", labels = scales::percent) +
+  coord_cartesian(xlim = c(55, 75), ylim = c(0, 0.3))
+ggsave("prevalence_unemployment_mal.pdf", height = 8, width = 7)
+
+ggplot(table_age_out %>% filter(gender == "Female population"), aes(x = age, y = outcome_rate, color = cohort_two, group = cohort_two)) +
+  facet_wrap(country ~ ., ncol = 4) +
+  geom_vline(xintercept = 65, linetype = "dashed") +
+  geom_line() +
+  scale_color_discrete(name = "Birth Cohort") +
+  theme_linedraw() +
+  theme(panel.grid.minor.x = element_blank(),
+        panel.grid.minor.y = element_blank(),
+        strip.text.x = element_text(size = 9),
+        axis.title.x = element_text(size = 12, face = "bold", colour = "black"), 
+        axis.title.y = element_text(size = 12, face = "bold", colour = "black"),
+        axis.text.x = element_text(size = 9, angle = 45, vjust = 1, hjust = 1, colour = "black"),
+        axis.text.y = element_text(size = 9, colour = "black"),
+        axis.line = element_line(),
+        axis.ticks = element_line(),
+        legend.text = element_text(size = 9, colour = "black"),
+        legend.title = element_text(size = 12, face = "bold", colour = "black"),
+        legend.position = "right") +
+  scale_x_continuous("Age", breaks = c(seq(55, 74, 5), 75)) +
+  scale_y_continuous("Prelvance (In %)", labels = scales::percent) +
+  coord_cartesian(xlim = c(55, 75), ylim = c(0, 0.3))
+ggsave("prevalence_unemployment_fem.pdf", height = 8, width = 7)
+
+```
+
+# Prevalence of retirement
+```{r}
+table_age_out <- data %>% mutate(outcome = ifelse(status == "Retired", 1, 0))
+
+table_age_out <- table_age_out %>%
+  group_by(country, country_code, country_group, gender, cohort_two, age) %>%
+  reframe(
+    total = sum(weight, na.rm = T),
+    outcome = sum(outcome * weight, na.rm = T),
+    outcome_rate = outcome / total) %>%
+  unique()
+
+ggplot(table_age_out %>% filter(gender == "Male population"), aes(x = age, y = outcome_rate, color = cohort_two, group = cohort_two)) +
+  facet_wrap(country ~ ., ncol = 4) +
+  geom_vline(xintercept = 65, linetype = "dashed") +
+  geom_line() +
+  scale_color_discrete(name = "Birth Cohort") +
+  theme_linedraw() +
+  theme(panel.grid.minor.x = element_blank(),
+        panel.grid.minor.y = element_blank(),
+        strip.text.x = element_text(size = 9),
+        axis.title.x = element_text(size = 12, face = "bold", colour = "black"), 
+        axis.title.y = element_text(size = 12, face = "bold", colour = "black"),
+        axis.text.x = element_text(size = 9, angle = 45, vjust = 1, hjust = 1, colour = "black"),
+        axis.text.y = element_text(size = 9, colour = "black"),
+        axis.line = element_line(),
+        axis.ticks = element_line(),
+        legend.text = element_text(size = 9, colour = "black"),
+        legend.title = element_text(size = 12, face = "bold", colour = "black"),
+        legend.position = "right") +
+  scale_x_continuous("Age", breaks = c(seq(55, 74, 5), 75)) +
+  scale_y_continuous("Prelvance (In %)", labels = scales::percent) +
+  coord_cartesian(xlim = c(55, 75), ylim = c(0, 1))
+ggsave("prevalence_retirement_mal.pdf", height = 8, width = 7)
+
+ggplot(table_age_out %>% filter(gender == "Female population"), aes(x = age, y = outcome_rate, color = cohort_two, group = cohort_two)) +
+  facet_wrap(country ~ ., ncol = 4) +
+  geom_vline(xintercept = 65, linetype = "dashed") +
+  geom_line() +
+  scale_color_discrete(name = "Birth Cohort") +
+  theme_linedraw() +
+  theme(panel.grid.minor.x = element_blank(),
+        panel.grid.minor.y = element_blank(),
+        strip.text.x = element_text(size = 9),
+        axis.title.x = element_text(size = 12, face = "bold", colour = "black"), 
+        axis.title.y = element_text(size = 12, face = "bold", colour = "black"),
+        axis.text.x = element_text(size = 9, angle = 45, vjust = 1, hjust = 1, colour = "black"),
+        axis.text.y = element_text(size = 9, colour = "black"),
+        axis.line = element_line(),
+        axis.ticks = element_line(),
+        legend.text = element_text(size = 9, colour = "black"),
+        legend.title = element_text(size = 12, face = "bold", colour = "black"),
+        legend.position = "right") +
+  scale_x_continuous("Age", breaks = c(seq(55, 74, 5), 75)) +
+  scale_y_continuous("Prelvance (In %)", labels = scales::percent) +
+  coord_cartesian(xlim = c(55, 75), ylim = c(0, 1))
+ggsave("prevalence_retirement_fem.pdf", height = 8, width = 7)
+
+```
+
+# Prevalence of inactivity
+```{r}
+table_age_out <- data %>% mutate(outcome = ifelse(status %in% c("Ill health", "Other"), 1, 0))
+
+table_age_out <- table_age_out %>%
+  group_by(country, country_code, country_group, gender, cohort_two, age) %>%
+  reframe(
+    total = sum(weight, na.rm = T),
+    outcome = sum(outcome * weight, na.rm = T),
+    outcome_rate = outcome / total) %>%
+  unique()
+
+ggplot(table_age_out %>% filter(gender == "Male population"), aes(x = age, y = outcome_rate, color = cohort_two, group = cohort_two)) +
+  facet_wrap(country ~ ., ncol = 4) +
+  geom_vline(xintercept = 65, linetype = "dashed") +
+  geom_line() +
+  scale_color_discrete(name = "Birth Cohort") +
+  theme_linedraw() +
+  theme(panel.grid.minor.x = element_blank(),
+        panel.grid.minor.y = element_blank(),
+        strip.text.x = element_text(size = 9),
+        axis.title.x = element_text(size = 12, face = "bold", colour = "black"), 
+        axis.title.y = element_text(size = 12, face = "bold", colour = "black"),
+        axis.text.x = element_text(size = 9, angle = 45, vjust = 1, hjust = 1, colour = "black"),
+        axis.text.y = element_text(size = 9, colour = "black"),
+        axis.line = element_line(),
+        axis.ticks = element_line(),
+        legend.text = element_text(size = 9, colour = "black"),
+        legend.title = element_text(size = 12, face = "bold", colour = "black"),
+        legend.position = "right") +
+  scale_x_continuous("Age", breaks = c(seq(55, 74, 5), 75)) +
+  scale_y_continuous("Prelvance (In %)", labels = scales::percent) +
+  coord_cartesian(xlim = c(55, 75), ylim = c(0, 1))
+ggsave("prevalence_inactivity_mal.pdf", height = 8, width = 7)
+
+ggplot(table_age_out %>% filter(gender == "Female population"), aes(x = age, y = outcome_rate, color = cohort_two, group = cohort_two)) +
+  facet_wrap(country ~ ., ncol = 4) +
+  geom_vline(xintercept = 65, linetype = "dashed") +
+  geom_line() +
+  scale_color_discrete(name = "Birth Cohort") +
+  theme_linedraw() +
+  theme(panel.grid.minor.x = element_blank(),
+        panel.grid.minor.y = element_blank(),
+        strip.text.x = element_text(size = 9),
+        axis.title.x = element_text(size = 12, face = "bold", colour = "black"), 
+        axis.title.y = element_text(size = 12, face = "bold", colour = "black"),
+        axis.text.x = element_text(size = 9, angle = 45, vjust = 1, hjust = 1, colour = "black"),
+        axis.text.y = element_text(size = 9, colour = "black"),
+        axis.line = element_line(),
+        axis.ticks = element_line(),
+        legend.text = element_text(size = 9, colour = "black"),
+        legend.title = element_text(size = 12, face = "bold", colour = "black"),
+        legend.position = "right") + 
+  scale_x_continuous("Age", breaks = c(seq(55, 74, 5), 75)) +
+  scale_y_continuous("Prelvance (In %)", labels = scales::percent) +
+  coord_cartesian(xlim = c(55, 75), ylim = c(0, 1))
+ggsave("prevalence_inactivity_fem.pdf", height = 8, width = 7)
+
+```
+
+```{r}
+
+```
