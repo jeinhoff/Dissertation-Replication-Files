@@ -16,7 +16,7 @@ rm(list = ls())
 load(".../data_de.RData")
 
 # Set number of imputations
-n_imputations <- 5
+n_imputations <- 20
 
 # Set seed for replication
 set.seed(999)
