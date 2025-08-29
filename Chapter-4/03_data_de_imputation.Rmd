@@ -1,0 +1,299 @@
+---
+title: "1.3_data_de_imputation"
+---
+
+```{r setup}
+# Load packages
+library("tidyverse")
+library("rio")
+library("mice")
+library("lmtp")
+
+# Clear work space
+rm(list = ls())
+
+# Load data set for the de
+load(".../data_de.RData")
+
+# Set number of imputations
+n_imputations <- 20
+
+# Set seed for replication
+set.seed(999)
+
+```
+
+```{r}
+# Check overall missingness
+test <- data_de %>% select(-c("country", "orgpid", "hid", "age", "weight"))
+
+(sum(is.na(test)) / prod(dim(test))) * 100
+
+rm(test)
+
+# Check rows with missingness
+round(100 - (data_de %>% na.omit() %>% nrow()) / nrow(data_de) * 100, 1)
+
+# Check missingness in each variable
+round(colSums(is.na(data_de))/nrow(data_de) * 100, 1)
+
+```
+
+```{r}
+# exclude variables not used for imputation
+data_de_wide <- data_de %>% select(-c("country", "hid", "retired", "unemployment_rate", "inflation_rate", "weight", "homeowner"))
+
+# convert data set to wide-format for imputation of longitudinal covariates
+data_de_wide <- data_de_wide %>%
+  group_by(orgpid) %>%
+  pivot_wider(names_from = age, values_from = c(3:5, 10:17)) %>% 
+  unchop(everything()) %>%
+  ungroup() %>%
+  select(-c("orgpid"))
+
+```
+
+```{r}
+# set up imputation model
+imp_model <- mice(data_de_wide, maxit = 0)
+
+pred <- imp_model$pred
+
+pred[pred == 1] <- 0
+
+pred[, c("female", "year_born", "migrant", "education_level")] <- 1
+
+for (i in c(50:65)) {
+  pred[grep(i, rownames(pred)), grep(i - 5, colnames(pred))] <- 1
+  pred[grep(i, rownames(pred)), grep(i - 4, colnames(pred))] <- 1
+  pred[grep(i, rownames(pred)), grep(i - 3, colnames(pred))] <- 1
+  pred[grep(i, rownames(pred)), grep(i - 2, colnames(pred))] <- 1
+  pred[grep(i, rownames(pred)), grep(i - 1, colnames(pred))] <- 1
+  pred[grep(i, rownames(pred)), grep(i, colnames(pred))] <- 1}
+
+rm(i, imp_model)
+
+```
+
+```{r}
+# create matrix that mirrors data set to indicate where values should be imputed
+where <- data_de %>% ungroup() %>% filter(age %in% c(50:65)) %>% select(-c("orgpid", "hid", "age", "country", "retired", "unemployment_rate", "inflation_rate", "weight", "homeowner"))
+
+where <- is.na(where)
+
+where <- as.data.frame(cbind(as.character(data_de$orgpid), as.character(data_de$age), where))
+
+where <- where %>% rename("orgpid" = "V1", "age" = "V2")
+
+where <- where %>%
+  group_by(orgpid) %>%
+  pivot_wider(names_from = age, values_from = c(3:5, 10:17)) %>% 
+  ungroup() %>%
+  select(-c("orgpid"))
+
+where[is.na(where)] <- "FALSE"
+
+```
+
+```{r}
+# impute data
+imputation <- mice(data_de_wide,
+                   pred = pred,
+                   where = where,
+                   meth = "cart",
+                   threshold = 1.1,
+                   m = n_imputations)
+
+rm(pred, meth, where)
+
+```
+
+```{r}
+# loop over imputations to complete data set and convert into wide format for the analysis
+
+for (i in c(1:n_imputations)) {
+  
+  # complete data set with imputed values
+  data_de_imp <- complete(imputation, i)
+
+  # gather excluded vars and add to imputed data set
+  vars <- data_de %>% ungroup() %>%
+    select("country", "orgpid", "hid", "age", "unemployment_rate", "inflation_rate", "weight") %>%
+    group_by(orgpid) %>%
+    pivot_wider(names_from = age, values_from = c("unemployment_rate", "inflation_rate", "weight")) %>% 
+    unchop(everything())
+
+  data_de_imp <- cbind(vars, data_de_imp)
+
+  # convert into long format
+  data_de_imp <- data_de_imp %>% 
+    rename_with(~ str_c("retired", seq_along(.x)), contains("retired")) %>% 
+    pivot_longer(
+      cols = -c("country", "orgpid", "hid", "female", "year_born", "migrant", "education_level"), 
+      names_to = c(".value"),
+      names_pattern = "(\\D+)\\d*$", 
+      values_drop_na = T)
+  
+  # add missing variables
+  data_de_imp$orgpid <- data_de$orgpid
+  data_de_imp$age <- data_de$age
+  data_de_imp$retired <- data_de$retired
+
+  # correct column names
+  colnames(data_de_imp) <- sub("_$", "", colnames(data_de_imp))
+
+  # correct variables formats and variables types
+  data_de_imp <- data_de_imp %>% unchop(everything()) %>% ungroup()
+  
+  # derive homeowner variables
+  data_de_imp <- data_de_imp %>% mutate(homeowner = ifelse(homeowner_type %in% c("Renter"), "Renter", "Homeowner"))
+  
+  # add birth cohort
+  data_de_imp <- data_de_imp %>%
+    mutate(cohort_born = case_when(
+      year_born %in% c(1931:1935) ~ "1931:1935",
+      year_born %in% c(1936:1940) ~ "1936:1940",
+      year_born %in% c(1941:1945) ~ "1941:1945",
+      year_born %in% c(1946:1950) ~ "1946:1950",
+      year_born %in% c(1951:1955) ~ "1951:1955",
+      year_born %in% c(1956:1960) ~ "1956:1960",
+      year_born %in% c(1961:1965) ~ "1961:1965",
+      year_born %in% c(1966:1970) ~ "1966:1970",
+      year_born %in% c(1971:1975) ~ "1971:1975",
+      year_born %in% c(1976:1980) ~ "1976:1980")) %>%
+    mutate(cohort_born = as.character(cohort_born))
+  
+  # re-level factor variables
+  data_de_imp <- data_de_imp %>% 
+    mutate(homeowner = as.factor(homeowner), homeowner = fct_relevel(homeowner, c("Renter", "Homeowner"))) %>%
+    mutate(homeowner_type = as.factor(homeowner_type), homeowner_type = fct_relevel(homeowner_type, c("Renter", "Outright owner", "Mortgagor")))
+
+  # sort variables
+  data_de_imp <- data_de_imp %>% select("orgpid", "hid", "age", "retired", "homeowner", "homeowner_type", "female", "year_born", "cohort_born", "migrant", "education_level", "poor_health", "marital_status", "children_any", "household_size", "occupation_group", "public_sector", "self_employed", "hh_income_eq", "unemployment_rate", "inflation_rate", "region", "social_housing", "weight")
+  
+  # censoring weight
+  last_wave <- data_de_imp %>% 
+    group_by(orgpid) %>% 
+    filter(age == max(age)) %>%
+    mutate(cens = ifelse(age == 65 | retired == 1, 0, 1))
+
+  first_wave <- data_de_imp %>% 
+    group_by(orgpid) %>% 
+    filter(age == min(age))
+
+  first_wave$cens <- last_wave$cens
+
+  model <- glm(cens ~ female + migrant + year_born + education_level + poor_health + marital_status + children_any + household_size + public_sector + self_employed + hh_income_eq + region + occupation_group, first_wave, family = binomial(), weights = weight)
+
+  first_wave$cens_weight <- 1 - predict(model, first_wave, type = "response")
+  
+  first_wave <- first_wave %>%
+    mutate(final_weight = weight * (1 / cens_weight)) %>%
+    select(orgpid, cens_weight, final_weight)
+
+  data_de_imp <- data_de_imp %>% left_join(first_wave, by = "orgpid")
+  
+  rm(last_wave, first_wave, model)
+
+  # rename variables for analysis
+  data_de_imp_wide <- data_de_imp %>%
+    rename(
+      "Y" = "retired",
+      "T1" = "homeowner",
+      "T2" = "homeowner_type",
+      "T3" = "social_housing",
+      "B1" = "female",
+      "B2" = "year_born",
+      "B3" = "migrant",
+      "B4" = "education_level",
+      "L1" = "poor_health",
+      "L2" = "marital_status",
+      "L3" = "children_any",
+      "L4" = "occupation_group",
+      "L5" = "self_employed",
+      "L6" = "hh_income_eq",
+      "L7" = "region",
+      "L8" = "unemployment_rate",
+      "L9" = "inflation_rate",
+      "L10" = "household_size",
+      "L11" = "public_sector")
+
+  # set variable types for analysis
+  data_de_imp_wide$Y <- as.numeric(as.character(data_de_imp_wide$Y))
+  data_de_imp_wide$T1 <- as.character(data_de_imp_wide$T1)
+  data_de_imp_wide$T2 <- as.character(data_de_imp_wide$T2)
+  data_de_imp_wide$T3 <- as.character(data_de_imp_wide$T3)
+  
+  # create censoring indicator
+  data_de_imp_wide <- data_de_imp_wide %>% group_by(orgpid) %>% mutate(C = ifelse(age == max(age), 0, 1))
+
+  # convert to wide format
+  data_de_imp_wide <- data_de_imp_wide %>% 
+    pivot_wider(
+      names_from = age,
+      values_from = c(Y, T1, T2, T3, C, L1, L2, L3, L4, L5, L6, L7, L8, L9, L10, L11))
+
+  # carry forward last outcome for retired respondents
+  data_de_imp_wide <- data_de_imp_wide %>% event_locf(paste0("Y_", 50:65)) %>% as.data.frame()
+  
+  # re-level factor variables
+  data_de_imp <- data_de_imp %>% 
+    mutate(homeowner = as.factor(homeowner), homeowner = fct_relevel(homeowner, c("Renter", "Homeowner"))) %>%
+    mutate(homeowner_type = as.factor(homeowner_type), homeowner_type = fct_relevel(homeowner_type, c("Renter", "Outright owner", "Mortgagor")))
+  
+  # correct treatment factor variable
+  data_de_imp_wide$T1_50 <- factor(data_de_imp_wide$T1_50, levels = c("Homeowner", "Renter"))
+  data_de_imp_wide$T1_51 <- factor(data_de_imp_wide$T1_51, levels = c("Homeowner", "Renter"))
+  data_de_imp_wide$T1_52 <- factor(data_de_imp_wide$T1_52, levels = c("Homeowner", "Renter"))
+  data_de_imp_wide$T1_53 <- factor(data_de_imp_wide$T1_53, levels = c("Homeowner", "Renter"))
+  data_de_imp_wide$T1_54 <- factor(data_de_imp_wide$T1_54, levels = c("Homeowner", "Renter"))
+  data_de_imp_wide$T1_55 <- factor(data_de_imp_wide$T1_55, levels = c("Homeowner", "Renter"))
+  data_de_imp_wide$T1_56 <- factor(data_de_imp_wide$T1_56, levels = c("Homeowner", "Renter"))
+  data_de_imp_wide$T1_57 <- factor(data_de_imp_wide$T1_57, levels = c("Homeowner", "Renter"))
+  data_de_imp_wide$T1_58 <- factor(data_de_imp_wide$T1_58, levels = c("Homeowner", "Renter"))
+  data_de_imp_wide$T1_59 <- factor(data_de_imp_wide$T1_59, levels = c("Homeowner", "Renter"))
+  data_de_imp_wide$T1_60 <- factor(data_de_imp_wide$T1_60, levels = c("Homeowner", "Renter"))
+  data_de_imp_wide$T1_61 <- factor(data_de_imp_wide$T1_61, levels = c("Homeowner", "Renter"))
+  data_de_imp_wide$T1_62 <- factor(data_de_imp_wide$T1_62, levels = c("Homeowner", "Renter"))
+  data_de_imp_wide$T1_63 <- factor(data_de_imp_wide$T1_63, levels = c("Homeowner", "Renter"))
+  data_de_imp_wide$T1_64 <- factor(data_de_imp_wide$T1_64, levels = c("Homeowner", "Renter"))
+  data_de_imp_wide$T1_65 <- factor(data_de_imp_wide$T1_65, levels = c("Homeowner", "Renter"))
+
+  data_de_imp_wide$T2_50 <- factor(data_de_imp_wide$T2_50, levels = c("Outright owner", "Mortgagor", "Renter"))
+  data_de_imp_wide$T2_51 <- factor(data_de_imp_wide$T2_51, levels = c("Outright owner", "Mortgagor", "Renter"))
+  data_de_imp_wide$T2_52 <- factor(data_de_imp_wide$T2_52, levels = c("Outright owner", "Mortgagor", "Renter"))
+  data_de_imp_wide$T2_53 <- factor(data_de_imp_wide$T2_53, levels = c("Outright owner", "Mortgagor", "Renter"))
+  data_de_imp_wide$T2_54 <- factor(data_de_imp_wide$T2_54, levels = c("Outright owner", "Mortgagor", "Renter"))
+  data_de_imp_wide$T2_55 <- factor(data_de_imp_wide$T2_55, levels = c("Outright owner", "Mortgagor", "Renter"))
+  data_de_imp_wide$T2_56 <- factor(data_de_imp_wide$T2_56, levels = c("Outright owner", "Mortgagor", "Renter"))
+  data_de_imp_wide$T2_57 <- factor(data_de_imp_wide$T2_57, levels = c("Outright owner", "Mortgagor", "Renter"))
+  data_de_imp_wide$T2_58 <- factor(data_de_imp_wide$T2_58, levels = c("Outright owner", "Mortgagor", "Renter"))
+  data_de_imp_wide$T2_59 <- factor(data_de_imp_wide$T2_59, levels = c("Outright owner", "Mortgagor", "Renter"))
+  data_de_imp_wide$T2_60 <- factor(data_de_imp_wide$T2_60, levels = c("Outright owner", "Mortgagor", "Renter"))
+  data_de_imp_wide$T2_61 <- factor(data_de_imp_wide$T2_61, levels = c("Outright owner", "Mortgagor", "Renter"))
+  data_de_imp_wide$T2_62 <- factor(data_de_imp_wide$T2_62, levels = c("Outright owner", "Mortgagor", "Renter"))
+  data_de_imp_wide$T2_63 <- factor(data_de_imp_wide$T2_63, levels = c("Outright owner", "Mortgagor", "Renter"))
+  data_de_imp_wide$T2_64 <- factor(data_de_imp_wide$T2_64, levels = c("Outright owner", "Mortgagor", "Renter"))
+  data_de_imp_wide$T2_65 <- factor(data_de_imp_wide$T2_65, levels = c("Outright owner", "Mortgagor", "Renter"))
+  
+  data_de_imp$hid <- as.character(data_de_imp$hid)
+  data_de_imp_wide$hid <- as.character(data_de_imp_wide$hid)
+  
+  # create new data sets with indicator for imputation round
+  assign(paste0("data_de_imp_", i), data_de_imp)
+  assign(paste0("data_de_imp_wide_", i), data_de_imp_wide)
+
+}
+
+rm(vars, data_de_imp, data_de_imp_wide, n_imputations, imputation, i)
+
+```
+
+```{r}
+save.image(".../data_final_de.RData")
+
+```
+
+```{r}
+
+```
