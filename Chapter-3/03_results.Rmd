@@ -1,0 +1,92 @@
+---
+title: "03_results"
+---
+
+```{r}
+rm(list = ls())
+
+library("tidyverse")
+
+```
+
+Adjust and run this file for all respective outcomes and analyses.
+
+```{r}
+
+###########################
+##### combine results #####
+###########################
+
+load(".../output_em_marg.RData")
+results_marg <- results %>% mutate(intervention = "Marginal")
+
+load(".../output_em_cond.RData")
+results_cond <- results %>% mutate(intervention = "Conditional")
+
+results <- rbind(results_marg, results_cond)
+
+rm(list = setdiff(ls(), c("results")))
+
+```
+
+```{r}
+
+###########################
+### extract data points ###
+###########################
+
+disp_before <- results %>% filter(estimand == "Disparity (observed)") %>% slice(1) %>% mutate(group = "Disparity", intervention = "Observed", gender = NA)
+disp_after <- results %>% filter(estimand == "Disparity after composition elimiated") %>% mutate(group = "Disparity", gender = NA)
+disp_change <- results %>% filter(estimand == "Due to composition (perc.)") %>% mutate(group = "Disparity change", gender = NA)
+
+levels_men_before <- results %>% filter(estimand == "Men (observed)") %>% slice(1) %>% mutate(group = "Level", intervention = "Observed", gender = "Men")
+levels_women_before <- results %>% filter(estimand == "Women (observed)") %>% slice(1) %>% mutate(group = "Level", intervention = "Observed", gender = "Women")
+
+levels_men_after <- results %>% filter(estimand == "Men after composition elimiated") %>% mutate(group = "Level", gender = "Men")
+levels_women_after <- results %>% filter(estimand == "Women after composition elimiated") %>% mutate(group = "Level", gender = "Women")
+
+results <- rbind(disp_before, disp_after, disp_change, levels_men_before, levels_women_before, levels_men_after, levels_women_after)
+
+results$intervention <- factor(results$intervention, levels = c("Observed", "Marginal", "Conditional"))
+
+results$outcome <- "Total employment"
+
+###########################
+########## plot ###########
+###########################
+
+ggplot() +
+  facet_wrap(~outcome, nrow = 1) +
+  geom_bar(data = results %>% filter(group == "Disparity"), aes(x = intervention, y = est, fill = intervention), width = 0.4, stat = "identity") +
+  geom_errorbar(data = results %>% filter(group == "Disparity"), aes(x = intervention, y = est, ymin = est - 1.96 * se, ymax = est + 1.96 * se), width = 0.1) +
+  geom_errorbar(data = results %>% filter(group == "Level"), aes(x = intervention, y = est, ymin = est - 1.96 * se, ymax = est + 1.96 * se, color = gender), width = 0.2, position = position_dodge(0.3)) +
+  geom_point(data = results %>% filter(group == "Level"), aes(x = intervention, y = est, color = gender), size = 1, position = position_dodge(0.3)) +
+  geom_text(data = results %>% filter(group == "Disparity change"), aes(x = intervention, y = 5, label = paste0( round(-est, 1), "%", sig)), size = 4.5) +
+  scale_y_continuous("Prevalence (%) / Disparity (pp.)", breaks = seq(-100, 100, 10)) +
+  scale_x_discrete(NULL) +
+  theme_linedraw() +
+  guides(fill = "none") +
+  geom_hline(yintercept = 0, color = "black") +
+  theme(legend.position = "bottom", 
+        text = element_text(colour = "black"),
+        legend.title=element_blank(), 
+        legend.text = element_text(colour = "black", size = 14),
+        axis.title.x = element_text(colour = "black", face = "bold", size = 12),
+        axis.title.y = element_text(colour = "black", face = "bold", size = 12),
+        axis.text.x = element_text(colour = "black", size = 12),
+        axis.text.y = element_text(colour = "black", size = 12),
+        strip.text = element_text(colour = 'White', size = 13),
+        panel.background = element_rect(fill = "transparent", colour = NA_character_),
+        plot.background = element_rect(fill = "transparent", colour = NA_character_),
+        legend.background = element_rect(fill = "transparent"),
+        legend.key = element_rect(fill = "transparent")) +
+  scale_fill_manual(values = c("darkgrey",RColorBrewer::brewer.pal(5, "Paired")[2:3])) +
+  scale_color_brewer(palette = "Set1") +
+  coord_cartesian(ylim = c(-10, 86))
+ggsave(".../plot_results_em.pdf", height = 6, width = 4)
+
+```
+
+```{r}
+
+```

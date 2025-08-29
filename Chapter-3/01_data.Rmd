@@ -1,0 +1,1579 @@
+---
+title: "01_data"
+---
+
+```{r setup}
+library("tidyverse")
+library("rio")
+
+rm(list = ls())
+
+```
+
+# 2015
+```{r}
+data_2015 <- import(".../suf2015.dta")
+
+data_2015 <- data_2015 %>%
+  select(id, idhhx, EF3, EF4, EF44, EF46, EF47, EF1, EF114, EF94, EF49, EF20, EF117, EF83, EF90, EF106, EF93, EF96, EF120, EF121, EF122, EF127, EF129, EF540, EF2001, EF541, EF521, EF952, EF563, EF865, EF29, EF38, EF413, EF401, EF443, EF35, EF710) %>% 
+  mutate(year = 2015)
+
+# person_id
+data_2015 <- data_2015 %>%
+  mutate(person_id = as.character(id)) %>%
+  select(-id)
+
+# household_id
+data_2015 <- data_2015 %>%
+  mutate(household_id = as.character(paste0(EF3, "_", EF4))) %>%
+  select(-c(EF3, EF4))
+
+# age: EF44
+data_2015 <- data_2015 %>%
+  mutate(age = as.numeric(EF44)) %>%
+  select(-EF44)
+
+# sex: EF46
+data_2015 <- data_2015 %>%
+  mutate(sex = case_when(
+    EF46 == 1 ~ "Male",
+    EF46 == 2 ~ "Female")) %>%
+  select(-EF46)
+
+# birth_year: EF47
+data_2015 <- data_2015 %>%
+  mutate(birth_year = as.numeric(EF47)) %>%
+  select(-EF47)
+
+# state: EF1
+data_2015 <- data_2015 %>%
+  mutate(state = case_when(
+    EF1 == 1 ~ "Schleswig-Holstein",
+    EF1 == 2 ~ "Hamburg",
+    EF1 == 3 ~ "Niedersachsen",
+    EF1 == 4 ~ "Bremen",
+    EF1 == 5 ~ "Nordrhein-Westfalen",
+    EF1 == 6 ~ "Hessen",
+    EF1 == 7 ~ "Rheinland-Pfalz",
+    EF1 == 8 ~ "Baden-Württemberg",
+    EF1 == 9 ~ "Bayern",
+    EF1 == 10 ~ "Saarland",
+    EF1 == 11 ~ "Berlin",
+    EF1 == 12 ~ "Brandenburg",
+    EF1 == 13 ~ "Mecklenburg-Vorpommern",
+    EF1 == 14 ~ "Sachsen",
+    EF1 == 15 ~ "Sachsen-Anhalt",
+    EF1 == 16 ~ "Thüringen"))
+
+# east_germany
+data_2015 <- data_2015 %>%
+  mutate(east_germany = ifelse(EF1 %in% c(1, 12, 13, 14, 15, 16), 1, 0)) %>%
+  select(-EF1)
+
+# family_status: EF49
+data_2015 <- data_2015 %>%
+  mutate(family_status = case_when(
+    EF49 %in% c(1) ~ "Single",
+    EF49 %in% c(2, 5) ~ "Married/With partner",
+    EF49 %in% c(3, 6) ~ "Widowed",
+    EF49 %in% c(4, 7) ~ "Divorced")) %>%
+  select(-EF49)
+
+# hh_size: EF20
+data_2015 <- data_2015 %>%
+  mutate(hh_size = as.numeric(EF20)) %>%
+  select(-EF20)
+
+# Erwerbstyp: EF29
+# Nichterwerbstyp: EF38
+
+# part_full_time: EF129
+data_2015 <- data_2015 %>%
+  mutate(job_status = case_when(
+    EF29 %in% c(1) & EF129 %in% c(1) ~ "Full-time employed",
+    EF29 %in% c(1) & EF129 %in% c(2) ~ "Part-time employed",
+    !EF29 %in% c(1) & EF413 %in% c(2, 7) ~ "Unemployed",
+    !EF29 %in% c(1) & EF401 %in% c(3) ~ "Retired",
+    T ~ "Inactive")) %>%
+  select(-EF129)
+
+# never_worked: EF83
+data_2015 <- data_2015 %>%
+  mutate(never_worked = ifelse(EF83 %in% c(8), 1, 0)) %>%
+  select(-EF83)
+
+# current_job_kldb: EF114
+data_2015 <- data_2015 %>%
+  mutate(current_job_kldb = as.character(EF114),
+         current_job_kldb = ifelse(current_job_kldb %in% c("-1", "-2", "-3", "-4", "-5", "-6", "-7", "-8", "9999"), NA, current_job_kldb)) %>%
+  select(-EF114)
+
+# current_job_isco: EF541
+data_2015 <- data_2015 %>%
+  mutate(current_job_isco = as.character(EF541),
+         current_job_isco = ifelse(current_job_isco %in% c("-1", "-2", "-3", "-4", "-5", "-6", "-7", "-8", "9999"), NA, current_job_isco)) %>%
+  select(-EF541)
+
+# current_job_selfemployed: 
+data_2015 <- data_2015 %>%
+  mutate(current_job_selfemployed = ifelse(EF117 %in% c(1, 2), 1, 0)) %>%
+  select(-EF117)
+
+# current_job_supervisor: EF120
+data_2015 <- data_2015 %>%
+  mutate(current_job_supervisor = ifelse(EF120 %in% c(8), 0, 1)) %>%
+  select(-EF120)
+
+# current_job_public_sector: EF121
+data_2015 <- data_2015 %>%
+  mutate(current_job_public_sector = ifelse(EF121 %in% c(1), 1, 0)) %>%
+  select(-EF121)
+
+# last_job_kldb: EF94
+data_2015 <- data_2015 %>%
+  mutate(last_job_kldb = as.character(EF94),
+         last_job_kldb = ifelse(last_job_kldb %in% c("-1", "-2", "-3", "-4", "-5", "-6", "-7", "-8", "9999"), NA, last_job_kldb)) %>%
+  select(-EF94)
+
+# last_job_isco: EF521
+data_2015 <- data_2015 %>%
+  mutate(last_job_isco = as.character(EF521),
+         last_job_isco = ifelse(last_job_isco %in% c("-1", "-2", "-3", "-4", "-5", "-6", "-7", "-8", "9999"), NA, last_job_isco)) %>%
+  select(-EF521)
+
+# last_job_selfemployed: EF93
+data_2015 <- data_2015 %>%
+  mutate(last_job_selfemployed = ifelse(EF93 %in% c(1, 2), 1, 0)) %>%
+  select(-EF93)
+
+# last_job_supervisor: EF96
+data_2015 <- data_2015 %>%
+  mutate(last_job_supervisor = case_when(
+    !EF96 %in% c(8) ~ 1)) %>%
+  select(-EF96)
+
+# last_job_public_sector: EF106
+data_2015 <- data_2015 %>%
+  mutate(last_job_public_sector = ifelse(EF106 %in% c(1), 1, 0)) %>%
+  select(-EF106)
+
+# last_job_year: EF90
+data_2015 <- data_2015 %>%
+  mutate(last_job_year = ifelse(EF90 %in% c(1900:2020), EF90, NA)) %>%
+  select(-EF90)
+
+# job_kldb
+data_2015 <- data_2015 %>%
+  mutate(job_kldb = ifelse(is.na(current_job_kldb), last_job_kldb, current_job_kldb),
+         job_kldb = substr(job_kldb, 1, 3))
+
+# job_isco
+data_2015 <- data_2015 %>%
+  mutate(job_isco = ifelse(is.na(current_job_isco), last_job_isco, current_job_isco))
+
+# job_selfemployed
+data_2015 <- data_2015 %>%
+  mutate(job_selfemployed = ifelse(is.na(current_job_selfemployed), last_job_selfemployed, current_job_selfemployed))
+
+# job_public_sector
+data_2015 <- data_2015 %>%
+  mutate(job_public_sector = ifelse(is.na(last_job_public_sector), last_job_public_sector, current_job_public_sector))
+
+# job_supervisor
+data_2015 <- data_2015 %>%
+  mutate(job_supervisor = ifelse(is.na(current_job_supervisor), last_job_supervisor, current_job_supervisor))
+
+# highest_education: EF540
+data_2015 <- data_2015 %>%
+  mutate(highest_education_detailed = case_when(
+    EF540 %in% c(10) ~ "ISCED-1",
+    EF540 %in% c(20) ~ "ISCED-2",
+    EF540 %in% c(33, 34) ~ "ISCED-3",
+    EF540 %in% c(40) ~ "ISCED-4",
+    EF540 %in% c(50) ~ "ISCED-5",
+    EF540 %in% c(60) ~ "ISCED-6",
+    EF540 %in% c(70) ~ "ISCED-7",
+    EF540 %in% c(80) ~ "ISCED-8"))
+
+data_2015 <- data_2015 %>%
+  mutate(highest_education = case_when(
+    EF540 %in% c(10, 20) ~ "Low",
+    EF540 %in% c(33, 34, 40) ~ "Medium",
+    EF540 %in% c(50, 60, 70, 80) ~ "High")) %>%
+  select(-EF540)
+
+# migration_background: EF2001
+data_2015 <- data_2015 %>%
+  mutate(migration_background = case_when(
+    EF2001 %in% c(0) ~ "No migration background",
+    EF2001 %in% c(16:31, 41, 51, 61, 81) ~ "Foreign born",
+    T ~ "Migration background")) %>%
+  select(-EF2001)
+
+# urban_residence: EF563
+data_2015 <- data_2015 %>%
+  mutate(urban_residence = case_when(
+    EF563 %in% c(1, 2, 4) ~ "Rural and semi-urban residence",
+    EF563 %in% c(3, 5, 6, 7, 8, 9) ~ "Urban residence")) %>%
+  select(-EF563)
+
+# has_children: EF865
+data_2015 <- data_2015 %>%
+  mutate(has_children = case_when(
+    EF865 %in% c(1, 4, 7, 9) ~ "Has children",
+    EF865 %in% c(2, 5, 6, 8) ~ "No children")) %>%
+  select(-EF865)
+
+# survey_weight: EF952
+data_2015 <- data_2015 %>%
+  mutate(survey_weight = as.numeric(EF952)) %>%
+  select(-EF952)
+
+# job_status_last_year: EF443 
+data_2015 <- data_2015 %>%
+  mutate(job_status_last_year = case_when(
+    EF443 %in% c(1, 2, 3, 4) ~ "Employed",
+    EF443 %in% c(10) ~ "Unemployed",
+    EF443 %in% c(12) ~ "Retired",
+    EF443 %in% c(5, 7, 8, 11, 12, 13, 14) ~ "Inactive"))
+
+# relation: EF710
+data_2015 <- data_2015 %>%
+  mutate(relation = case_when(
+    EF710 %in% c(1) ~ "Respondent",
+    EF710 %in% c(2) ~ "Partner",
+    T ~ "Other")) %>%
+  select(-EF710)
+
+# position: EF35
+data_2015 <- data_2015 %>%
+  mutate(position = as.numeric(EF35)) %>%
+  select(-EF35)
+
+```
+
+# 2016
+```{r}
+data_2016 <- import(".../mz2016.dta")
+
+data_2016 <- data_2016 %>% 
+  select(id, idhhx, EF44, EF46, EF47, EF1, EF114, EF94, EF49, EF20, EF117, EF83, EF90, EF106, EF93, EF96, EF120, EF121, EF122, EF127, EF129, EF540, EF2001, EF541, EF521, EF952, EF563, EF865, EF29, EF38, EF413, EF401, EF443, EF35, EF710) %>% 
+  mutate(year = 2016)
+
+# person_id
+data_2016 <- data_2016 %>%
+  mutate(person_id = as.character(id)) %>%
+  select(-id)
+
+# household_id
+data_2016 <- data_2016 %>%
+  mutate(household_id = as.character(idhhx)) %>%
+  select(-idhhx)
+
+# age: EF44
+data_2016 <- data_2016 %>%
+  mutate(age = as.numeric(EF44)) %>%
+  select(-EF44)
+
+# sex: EF46
+data_2016 <- data_2016 %>%
+  mutate(sex = case_when(
+    EF46 == 1 ~ "Male",
+    EF46 == 2 ~ "Female")) %>%
+  select(-EF46)
+
+# birth_year: EF47
+data_2016 <- data_2016 %>%
+  mutate(birth_year = as.numeric(EF47)) %>%
+  select(-EF47)
+
+# state: EF1
+data_2016 <- data_2016 %>%
+  mutate(state = case_when(
+    EF1 == 1 ~ "Schleswig-Holstein",
+    EF1 == 2 ~ "Hamburg",
+    EF1 == 3 ~ "Niedersachsen",
+    EF1 == 4 ~ "Bremen",
+    EF1 == 5 ~ "Nordrhein-Westfalen",
+    EF1 == 6 ~ "Hessen",
+    EF1 == 7 ~ "Rheinland-Pfalz",
+    EF1 == 8 ~ "Baden-Württemberg",
+    EF1 == 9 ~ "Bayern",
+    EF1 == 10 ~ "Saarland",
+    EF1 == 11 ~ "Berlin",
+    EF1 == 12 ~ "Brandenburg",
+    EF1 == 13 ~ "Mecklenburg-Vorpommern",
+    EF1 == 14 ~ "Sachsen",
+    EF1 == 15 ~ "Sachsen-Anhalt",
+    EF1 == 16 ~ "Thüringen"))
+
+# east_germany
+data_2016 <- data_2016 %>%
+  mutate(east_germany = ifelse(EF1 %in% c(1, 12, 13, 14, 15, 16), 1, 0)) %>%
+  select(-EF1)
+
+# family_status: EF49
+data_2016 <- data_2016 %>%
+  mutate(family_status = case_when(
+    EF49 %in% c(1) ~ "Single",
+    EF49 %in% c(2, 5) ~ "Married/With partner",
+    EF49 %in% c(3, 6) ~ "Widowed",
+    EF49 %in% c(4, 7) ~ "Divorced")) %>%
+  select(-EF49)
+
+# hh_size: EF20
+data_2016 <- data_2016 %>%
+  mutate(hh_size = as.numeric(EF20)) %>%
+  select(-EF20)
+
+# Erwerbstyp: EF29
+# Nichterwerbstyp: EF38
+
+# part_full_time: EF129
+data_2016 <- data_2016 %>%
+  mutate(job_status = case_when(
+    EF29 %in% c(1) & EF129 %in% c(1) ~ "Full-time employed",
+    EF29 %in% c(1) & EF129 %in% c(2) ~ "Part-time employed",
+    !EF29 %in% c(1) & EF413 %in% c(2, 7) ~ "Unemployed",
+    !EF29 %in% c(1) & EF401 %in% c(3) ~ "Retired",
+    T ~ "Inactive")) %>%
+  select(-EF129)
+
+# never_worked: EF83
+data_2016 <- data_2016 %>%
+  mutate(never_worked = ifelse(EF83 %in% c(8), 1, 0)) %>%
+  select(-EF83)
+
+# current_job_kldb: EF114
+data_2016 <- data_2016 %>%
+  mutate(current_job_kldb = as.character(EF114),
+         current_job_kldb = ifelse(current_job_kldb %in% c("-1", "-2", "-3", "-4", "-5", "-6", "-7", "-8", "9999"), NA, current_job_kldb)) %>%
+  select(-EF114)
+
+# current_job_isco: EF541
+data_2016 <- data_2016 %>%
+  mutate(current_job_isco = as.character(EF541),
+         current_job_isco = ifelse(current_job_isco %in% c("-1", "-2", "-3", "-4", "-5", "-6", "-7", "-8", "9999"), NA, current_job_isco)) %>%
+  select(-EF541)
+
+# current_job_selfemployed: 
+data_2016 <- data_2016 %>%
+  mutate(current_job_selfemployed = ifelse(EF117 %in% c(1, 2), 1, 0)) %>%
+  select(-EF117)
+
+# current_job_supervisor: EF120
+data_2016 <- data_2016 %>%
+  mutate(current_job_supervisor = ifelse(EF120 %in% c(8), 0, 1)) %>%
+  select(-EF120)
+
+# current_job_public_sector: EF121
+data_2016 <- data_2016 %>%
+  mutate(current_job_public_sector = ifelse(EF121 %in% c(1), 1, 0)) %>%
+  select(-EF121)
+
+# last_job_kldb: EF94
+data_2016 <- data_2016 %>%
+  mutate(last_job_kldb = as.character(EF94),
+         last_job_kldb = ifelse(last_job_kldb %in% c("-1", "-2", "-3", "-4", "-5", "-6", "-7", "-8", "9999"), NA, last_job_kldb)) %>%
+  select(-EF94)
+
+# last_job_isco: EF521
+data_2016 <- data_2016 %>%
+  mutate(last_job_isco = as.character(EF521),
+         last_job_isco = ifelse(last_job_isco %in% c("-1", "-2", "-3", "-4", "-5", "-6", "-7", "-8", "9999"), NA, last_job_isco)) %>%
+  select(-EF521)
+
+# last_job_selfemployed: EF93
+data_2016 <- data_2016 %>%
+  mutate(last_job_selfemployed = ifelse(EF93 %in% c(1, 2), 1, 0)) %>%
+  select(-EF93)
+
+# last_job_supervisor: EF96
+data_2016 <- data_2016 %>%
+  mutate(last_job_supervisor = case_when(
+    !EF96 %in% c(8) ~ 1)) %>%
+  select(-EF96)
+
+# last_job_public_sector: EF106
+data_2016 <- data_2016 %>%
+  mutate(last_job_public_sector = ifelse(EF106 %in% c(1), 1, 0)) %>%
+  select(-EF106)
+
+# last_job_year: EF90
+data_2016 <- data_2016 %>%
+  mutate(last_job_year = ifelse(EF90 %in% c(1900:2020), EF90, NA)) %>%
+  select(-EF90)
+
+# job_kldb
+data_2016 <- data_2016 %>%
+  mutate(job_kldb = ifelse(is.na(current_job_kldb), last_job_kldb, current_job_kldb),
+         job_kldb = substr(job_kldb, 1, 3))
+
+# job_isco
+data_2016 <- data_2016 %>%
+  mutate(job_isco = ifelse(is.na(current_job_isco), last_job_isco, current_job_isco))
+
+# job_selfemployed
+data_2016 <- data_2016 %>%
+  mutate(job_selfemployed = ifelse(is.na(current_job_selfemployed), last_job_selfemployed, current_job_selfemployed))
+
+# job_public_sector
+data_2016 <- data_2016 %>%
+  mutate(job_public_sector = ifelse(is.na(last_job_public_sector), last_job_public_sector, current_job_public_sector))
+
+# job_supervisor
+data_2016 <- data_2016 %>%
+  mutate(job_supervisor = ifelse(is.na(current_job_supervisor), last_job_supervisor, current_job_supervisor))
+
+# highest_education: EF540
+data_2016 <- data_2016 %>%
+  mutate(highest_education_detailed = case_when(
+    EF540 %in% c(10) ~ "ISCED-1",
+    EF540 %in% c(20) ~ "ISCED-2",
+    EF540 %in% c(33, 34) ~ "ISCED-3",
+    EF540 %in% c(40) ~ "ISCED-4",
+    EF540 %in% c(50) ~ "ISCED-5",
+    EF540 %in% c(60) ~ "ISCED-6",
+    EF540 %in% c(70) ~ "ISCED-7",
+    EF540 %in% c(80) ~ "ISCED-8"))
+
+data_2016 <- data_2016 %>%
+  mutate(highest_education = case_when(
+    EF540 %in% c(10, 20) ~ "Low",
+    EF540 %in% c(33, 34, 40) ~ "Medium",
+    EF540 %in% c(50, 60, 70, 80) ~ "High")) %>%
+  select(-EF540)
+
+# migration_background: EF2001
+data_2016 <- data_2016 %>%
+  mutate(migration_background = case_when(
+    EF2001 %in% c(0) ~ "No migration background",
+    EF2001 %in% c(16:31, 41, 51, 61, 81) ~ "Foreign born",
+    T ~ "Migration background")) %>%
+  select(-EF2001)
+
+# urban_residence: EF563
+data_2016 <- data_2016 %>%
+  mutate(urban_residence = case_when(
+    EF563 %in% c(1, 2, 4) ~ "Rural and semi-urban residence",
+    EF563 %in% c(3, 5, 6, 7, 8, 9) ~ "Urban residence")) %>%
+  select(-EF563)
+
+# has_children: EF865
+data_2016 <- data_2016 %>%
+  mutate(has_children = case_when(
+    EF865 %in% c(1, 4, 7, 9) ~ "Has children",
+    EF865 %in% c(2, 5, 6, 8) ~ "No children")) %>%
+  select(-EF865)
+
+# survey_weight: EF952
+data_2016 <- data_2016 %>%
+  mutate(survey_weight = as.numeric(EF952)) %>%
+  select(-EF952)
+
+# job_status_last_year: EF443 
+data_2016 <- data_2016 %>%
+  mutate(job_status_last_year = case_when(
+    EF443 %in% c(1, 2, 3, 4) ~ "Employed",
+    EF443 %in% c(10) ~ "Unemployed",
+    EF443 %in% c(12) ~ "Retired",
+    EF443 %in% c(5, 7, 8, 11, 12, 13, 14) ~ "Inactive"))
+
+# relation: EF710
+data_2016 <- data_2016 %>%
+  mutate(relation = case_when(
+    EF710 %in% c(1) ~ "Respondent",
+    EF710 %in% c(2) ~ "Partner",
+    T ~ "Other")) %>%
+  select(-EF710)
+
+# position: EF35
+data_2016 <- data_2016 %>%
+  mutate(position = as.numeric(EF35)) %>%
+  select(-EF35)
+
+```
+
+# 2017
+```{r}
+data_2017 <- import(".../mz2017.dta")
+
+data_2017 <- data_2017 %>% 
+  select(id, idhhx, EF44, EF46, EF47, EF1, EF114, EF94, EF49, EF20, EF66, EF83, EF90, EF106, EF93, EF96, EF117, EF120, EF121, EF122, EF127, EF129, EF540, EF2001, EF541, EF521, EF2700, EF952, EF563, EF865, EF443, EF35, EF710) %>% 
+  mutate(year = 2017)
+
+# person_id
+data_2017 <- data_2017 %>%
+  mutate(person_id = as.character(id)) %>%
+  select(-id)
+
+# household_id
+data_2017 <- data_2017 %>%
+  mutate(household_id = as.character(idhhx)) %>%
+  select(-idhhx)
+
+# age: EF44
+data_2017 <- data_2017 %>%
+  mutate(age = as.numeric(EF44)) %>%
+  select(-EF44)
+
+# sex: EF46
+data_2017 <- data_2017 %>%
+  mutate(sex = case_when(
+    EF46 == 1 ~ "Male",
+    EF46 == 2 ~ "Female")) %>%
+  select(-EF46)
+
+# birth_year: EF47
+data_2017 <- data_2017 %>%
+  mutate(birth_year = as.numeric(EF47)) %>%
+  select(-EF47)
+
+# state: EF1
+data_2017 <- data_2017 %>%
+  mutate(state = case_when(
+    EF1 == 1 ~ "Schleswig-Holstein",
+    EF1 == 2 ~ "Hamburg",
+    EF1 == 3 ~ "Niedersachsen",
+    EF1 == 4 ~ "Bremen",
+    EF1 == 5 ~ "Nordrhein-Westfalen",
+    EF1 == 6 ~ "Hessen",
+    EF1 == 7 ~ "Rheinland-Pfalz",
+    EF1 == 8 ~ "Baden-Württemberg",
+    EF1 == 9 ~ "Bayern",
+    EF1 == 10 ~ "Saarland",
+    EF1 == 11 ~ "Berlin",
+    EF1 == 12 ~ "Brandenburg",
+    EF1 == 13 ~ "Mecklenburg-Vorpommern",
+    EF1 == 14 ~ "Sachsen",
+    EF1 == 15 ~ "Sachsen-Anhalt",
+    EF1 == 16 ~ "Thüringen"))
+
+# east_germany
+data_2017 <- data_2017 %>%
+  mutate(east_germany = ifelse(EF1 %in% c(1, 12, 13, 14, 15, 16), 1, 0)) %>%
+  select(-EF1)
+
+# family_status: EF49
+data_2017 <- data_2017 %>%
+  mutate(family_status = case_when(
+    EF49 %in% c(1) ~ "Single",
+    EF49 %in% c(2, 5) ~ "Married/With partner",
+    EF49 %in% c(3, 6) ~ "Widowed",
+    EF49 %in% c(4, 7) ~ "Divorced")) %>%
+  select(-EF49)
+
+# hh_size: EF20
+data_2017 <- data_2017 %>%
+  mutate(hh_size = as.numeric(EF20)) %>%
+  select(-EF20)
+
+# EF127
+# part_full_time: EF129
+data_2017 <- data_2017 %>%
+  mutate(job_status = case_when(
+    EF66 %in% c(1, 2, 3, 4, 5, 14, 16, 17) & EF129 %in% c(1) ~ "Full-time employed",
+    EF66 %in% c(1, 2, 3, 4, 5, 14, 16, 17) & EF129 %in% c(2) ~ "Part-time employed",
+    EF66 %in% c(10) ~ "Unemployed",
+    EF66 %in% c(9) ~ "Retired",
+    EF66 %in% c(7, 8, 11, 12, 13, 15) ~ "Inactive")) %>%
+  select(-EF66)
+
+# never_worked: EF83
+data_2017 <- data_2017 %>%
+  mutate(never_worked = ifelse(EF83 %in% c(8), 1, 0)) %>%
+  select(-EF83)
+
+# current_job_kldb: EF114
+data_2017 <- data_2017 %>%
+  mutate(current_job_kldb = as.character(EF114),
+         current_job_kldb = ifelse(current_job_kldb %in% c("-1", "-2", "-3", "-4", "-5", "-6", "-7", "-8", "9999"), NA, current_job_kldb)) %>%
+  select(-EF114)
+
+# current_job_isco: EF541
+data_2017 <- data_2017 %>%
+  mutate(current_job_isco = as.character(EF541),
+         current_job_isco = ifelse(current_job_isco %in% c("-1", "-2", "-3", "-4", "-5", "-6", "-7", "-8", "9999"), NA, current_job_isco)) %>%
+  select(-EF541)
+
+# current_job_selfemployed: 
+data_2017 <- data_2017 %>%
+  mutate(current_job_selfemployed = ifelse(EF117 %in% c(1, 2), 1, 0)) %>%
+  select(-EF117)
+
+# current_job_supervisor: EF120
+data_2017 <- data_2017 %>%
+  mutate(current_job_supervisor = ifelse(EF120 %in% c(8), 0, 1)) %>%
+  select(-EF120)
+
+# current_job_public_sector: EF121
+data_2017 <- data_2017 %>%
+  mutate(current_job_public_sector = ifelse(EF121 %in% c(1), 1, 0)) %>%
+  select(-EF121)
+
+# last_job_kldb: EF94
+data_2017 <- data_2017 %>%
+  mutate(last_job_kldb = as.character(EF94),
+         last_job_kldb = ifelse(last_job_kldb %in% c("-1", "-2", "-3", "-4", "-5", "-6", "-7", "-8", "9999"), NA, last_job_kldb)) %>%
+  select(-EF94)
+
+# last_job_isco: EF521
+data_2017 <- data_2017 %>%
+  mutate(last_job_isco = as.character(EF521),
+         last_job_isco = ifelse(last_job_isco %in% c("-1", "-2", "-3", "-4", "-5", "-6", "-7", "-8", "9999"), NA, last_job_isco)) %>%
+  select(-EF521)
+
+# last_job_selfemployed: EF93
+data_2017 <- data_2017 %>%
+  mutate(last_job_selfemployed = ifelse(EF93 %in% c(1, 2), 1, 0)) %>%
+  select(-EF93)
+
+# last_job_supervisor: EF96
+data_2017 <- data_2017 %>%
+  mutate(last_job_supervisor = case_when(
+    !EF96 %in% c(8) ~ 1)) %>%
+  select(-EF96)
+
+# last_job_public_sector: EF106
+data_2017 <- data_2017 %>%
+  mutate(last_job_public_sector = ifelse(EF106 %in% c(1), 1, 0)) %>%
+  select(-EF106)
+
+# last_job_year: EF90
+data_2017 <- data_2017 %>%
+  mutate(last_job_year = ifelse(EF90 %in% c(1900:2020), EF90, NA)) %>%
+  select(-EF90)
+
+# job_kldb
+data_2017 <- data_2017 %>%
+  mutate(job_kldb = ifelse(is.na(current_job_kldb), last_job_kldb, current_job_kldb),
+         job_kldb = substr(job_kldb, 1, 3))
+
+# job_isco
+data_2017 <- data_2017 %>%
+  mutate(job_isco = ifelse(is.na(current_job_isco), last_job_isco, current_job_isco))
+
+# job_selfemployed
+data_2017 <- data_2017 %>%
+  mutate(job_selfemployed = ifelse(is.na(current_job_selfemployed), last_job_selfemployed, current_job_selfemployed))
+
+# job_public_sector
+data_2017 <- data_2017 %>%
+  mutate(job_public_sector = ifelse(is.na(last_job_public_sector), last_job_public_sector, current_job_public_sector))
+
+# job_supervisor
+data_2017 <- data_2017 %>%
+  mutate(job_supervisor = ifelse(is.na(current_job_supervisor), last_job_supervisor, current_job_supervisor))
+
+# highest_education: EF540
+data_2017 <- data_2017 %>%
+  mutate(highest_education_detailed = case_when(
+    EF540 %in% c(10) ~ "ISCED-1",
+    EF540 %in% c(20) ~ "ISCED-2",
+    EF540 %in% c(33, 34) ~ "ISCED-3",
+    EF540 %in% c(40) ~ "ISCED-4",
+    EF540 %in% c(50) ~ "ISCED-5",
+    EF540 %in% c(60) ~ "ISCED-6",
+    EF540 %in% c(70) ~ "ISCED-7",
+    EF540 %in% c(80) ~ "ISCED-8"))
+
+data_2017 <- data_2017 %>%
+  mutate(highest_education = case_when(
+    EF540 %in% c(10, 20) ~ "Low",
+    EF540 %in% c(33, 34, 40) ~ "Medium",
+    EF540 %in% c(50, 60, 70, 80) ~ "High")) %>%
+  select(-EF540)
+
+# migration_background: EF2001
+data_2017 <- data_2017 %>%
+  mutate(migration_background = case_when(
+    EF2001 %in% c(0) ~ "No migration background",
+    EF2001 %in% c(16:31, 41, 51, 61, 81) ~ "Foreign born",
+    T ~ "Migration background")) %>%
+  select(-EF2001)
+
+# urban_residence: EF563
+data_2017 <- data_2017 %>%
+  mutate(urban_residence = case_when(
+    EF563 %in% c(1, 2, 4) ~ "Rural and semi-urban residence",
+    EF563 %in% c(3, 5, 6, 7, 8, 9) ~ "Urban residence")) %>%
+  select(-EF563)
+
+# has_children: EF865
+data_2017 <- data_2017 %>%
+  mutate(has_children = case_when(
+    EF865 %in% c(1, 4, 7, 9) ~ "Has children",
+    EF865 %in% c(2, 5, 6, 8) ~ "No children")) %>%
+  select(-EF865)
+
+# survey_weight: EF952
+data_2017 <- data_2017 %>%
+  mutate(survey_weight = as.numeric(EF952)) %>%
+  select(-EF952)
+
+# job_status_last_year: EF443 
+data_2017 <- data_2017 %>%
+  mutate(job_status_last_year = case_when(
+    EF443 %in% c(1, 2, 3, 4) ~ "Employed",
+    EF443 %in% c(10) ~ "Unemployed",
+    EF443 %in% c(12) ~ "Retired",
+    EF443 %in% c(5, 7, 8, 11, 12, 13, 14) ~ "Inactive"))
+
+# disability: EF2700 
+data_2017 <- data_2017 %>%
+  mutate(disability = ifelse(EF2700 == 1, 1, 0)) %>%
+  select(-EF2700)
+
+# relation: EF710
+data_2017 <- data_2017 %>%
+  mutate(relation = case_when(
+    EF710 %in% c(1) ~ "Respondent",
+    EF710 %in% c(2) ~ "Partner",
+    T ~ "Other")) %>%
+  select(-EF710)
+
+# position: EF35
+data_2017 <- data_2017 %>%
+  mutate(position = as.numeric(EF35)) %>%
+  select(-EF35)
+
+```
+
+# 2018
+```{r}
+data_2018 <- import(".../mz2018.dta")
+
+data_2018 <- data_2018 %>% 
+  select(ID, idhhx, EF44, EF46, EF47, EF1, EF114, EF94, EF49, EF20, EF66, EF83, EF90, EF106, EF93, EF96, EF117, EF120, EF121, EF122, EF127, EF129, EF517, EF2001, EF541, EF521, EF2700, EF952, EF563, EF865, EF443, EF35, EF710) %>% 
+  mutate(year = 2018)
+
+# person_id
+data_2018 <- data_2018 %>%
+  mutate(person_id = as.character(ID)) %>%
+  select(-ID)
+
+# household_id
+data_2018 <- data_2018 %>%
+  mutate(household_id = as.character(idhhx)) %>%
+  select(-idhhx)
+
+# age: EF44
+data_2018 <- data_2018 %>%
+  mutate(age = as.numeric(EF44)) %>%
+  select(-EF44)
+
+# sex: EF46
+data_2018 <- data_2018 %>%
+  mutate(sex = case_when(
+    EF46 == 1 ~ "Male",
+    EF46 == 2 ~ "Female")) %>%
+  select(-EF46)
+
+# birth_year: EF47
+data_2018 <- data_2018 %>%
+  mutate(birth_year = as.numeric(EF47)) %>%
+  select(-EF47)
+
+# state: EF1
+data_2018 <- data_2018 %>%
+  mutate(state = case_when(
+    EF1 == 1 ~ "Schleswig-Holstein",
+    EF1 == 2 ~ "Hamburg",
+    EF1 == 3 ~ "Niedersachsen",
+    EF1 == 4 ~ "Bremen",
+    EF1 == 5 ~ "Nordrhein-Westfalen",
+    EF1 == 6 ~ "Hessen",
+    EF1 == 7 ~ "Rheinland-Pfalz",
+    EF1 == 8 ~ "Baden-Württemberg",
+    EF1 == 9 ~ "Bayern",
+    EF1 == 10 ~ "Saarland",
+    EF1 == 11 ~ "Berlin",
+    EF1 == 12 ~ "Brandenburg",
+    EF1 == 13 ~ "Mecklenburg-Vorpommern",
+    EF1 == 14 ~ "Sachsen",
+    EF1 == 15 ~ "Sachsen-Anhalt",
+    EF1 == 16 ~ "Thüringen"))
+
+# east_germany
+data_2018 <- data_2018 %>%
+  mutate(east_germany = ifelse(EF1 %in% c(1, 12, 13, 14, 15, 16), 1, 0)) %>%
+  select(-EF1)
+
+# family_status: EF49
+data_2018 <- data_2018 %>%
+  mutate(family_status = case_when(
+    EF49 %in% c(1) ~ "Single",
+    EF49 %in% c(2, 5) ~ "Married/With partner",
+    EF49 %in% c(3, 6) ~ "Widowed",
+    EF49 %in% c(4, 7) ~ "Divorced")) %>%
+  select(-EF49)
+
+# hh_size: EF20
+data_2018 <- data_2018 %>%
+  mutate(hh_size = as.numeric(EF20)) %>%
+  select(-EF20)
+
+# EF127
+# part_full_time: EF129
+data_2018 <- data_2018 %>%
+  mutate(job_status = case_when(
+    EF66 %in% c(1, 2, 3, 4, 5, 14, 16, 17) & EF129 %in% c(1) ~ "Full-time employed",
+    EF66 %in% c(1, 2, 3, 4, 5, 14, 16, 17) & EF129 %in% c(2) ~ "Part-time employed",
+    EF66 %in% c(10) ~ "Unemployed",
+    EF66 %in% c(9) ~ "Retired",
+    EF66 %in% c(7, 8, 11, 12, 13, 15) ~ "Inactive")) %>%
+  select(-EF66)
+
+# never_worked: EF83
+data_2018 <- data_2018 %>%
+  mutate(never_worked = ifelse(EF83 %in% c(8), 1, 0)) %>%
+  select(-EF83)
+
+# current_job_kldb: EF114
+data_2018 <- data_2018 %>%
+  mutate(current_job_kldb = as.character(EF114),
+         current_job_kldb = ifelse(current_job_kldb %in% c("-1", "-2", "-3", "-4", "-5", "-6", "-7", "-8", "9999"), NA, current_job_kldb)) %>%
+  select(-EF114)
+
+# current_job_isco: EF541
+data_2018 <- data_2018 %>%
+  mutate(current_job_isco = as.character(EF541),
+         current_job_isco = ifelse(current_job_isco %in% c("-1", "-2", "-3", "-4", "-5", "-6", "-7", "-8", "9999"), NA, current_job_isco)) %>%
+  select(-EF541)
+
+# current_job_selfemployed: 
+data_2018 <- data_2018 %>%
+  mutate(current_job_selfemployed = ifelse(EF117 %in% c(1, 2), 1, 0)) %>%
+  select(-EF117)
+
+# current_job_supervisor: EF120
+data_2018 <- data_2018 %>%
+  mutate(current_job_supervisor = ifelse(EF120 %in% c(8), 0, 1)) %>%
+  select(-EF120)
+
+# current_job_public_sector: EF121
+data_2018 <- data_2018 %>%
+  mutate(current_job_public_sector = ifelse(EF121 %in% c(1), 1, 0)) %>%
+  select(-EF121)
+
+# last_job_kldb: EF94
+data_2018 <- data_2018 %>%
+  mutate(last_job_kldb = as.character(EF94),
+         last_job_kldb = ifelse(last_job_kldb %in% c("-1", "-2", "-3", "-4", "-5", "-6", "-7", "-8", "9999"), NA, last_job_kldb)) %>%
+  select(-EF94)
+
+# last_job_isco: EF521
+data_2018 <- data_2018 %>%
+  mutate(last_job_isco = as.character(EF521),
+         last_job_isco = ifelse(last_job_isco %in% c("-1", "-2", "-3", "-4", "-5", "-6", "-7", "-8", "9999"), NA, last_job_isco)) %>%
+  select(-EF521)
+
+# last_job_selfemployed: EF93
+data_2018 <- data_2018 %>%
+  mutate(last_job_selfemployed = ifelse(EF93 %in% c(1, 2), 1, 0)) %>%
+  select(-EF93)
+
+# last_job_supervisor: EF96
+data_2018 <- data_2018 %>%
+  mutate(last_job_supervisor = case_when(
+    !EF96 %in% c(8) ~ 1)) %>%
+  select(-EF96)
+
+# last_job_public_sector: EF106
+data_2018 <- data_2018 %>%
+  mutate(last_job_public_sector = ifelse(EF106 %in% c(1), 1, 0)) %>%
+  select(-EF106)
+
+# last_job_year: EF90
+data_2018 <- data_2018 %>%
+  mutate(last_job_year = ifelse(EF90 %in% c(1900:2020), EF90, NA)) %>%
+  select(-EF90)
+
+# job_kldb
+data_2018 <- data_2018 %>%
+  mutate(job_kldb = ifelse(is.na(current_job_kldb), last_job_kldb, current_job_kldb),
+         job_kldb = substr(job_kldb, 1, 3))
+
+# job_isco
+data_2018 <- data_2018 %>%
+  mutate(job_isco = ifelse(is.na(current_job_isco), last_job_isco, current_job_isco))
+
+# job_selfemployed
+data_2018 <- data_2018 %>%
+  mutate(job_selfemployed = ifelse(is.na(current_job_selfemployed), last_job_selfemployed, current_job_selfemployed))
+
+# job_public_sector
+data_2018 <- data_2018 %>%
+  mutate(job_public_sector = ifelse(is.na(last_job_public_sector), last_job_public_sector, current_job_public_sector))
+
+# job_supervisor
+data_2018 <- data_2018 %>%
+  mutate(job_supervisor = ifelse(is.na(current_job_supervisor), last_job_supervisor, current_job_supervisor))
+
+# highest_education: EF517
+data_2018 <- data_2018 %>%
+  mutate(highest_education_detailed = case_when(
+    EF517 %in% c(100) ~ "ISCED-1",
+    EF517 %in% c(244) ~ "ISCED-2",
+    EF517 %in% c(344, 353, 354) ~ "ISCED-3",
+    EF517 %in% c(453, 454) ~ "ISCED-4",
+    EF517 %in% c(550) ~ "ISCED-5",
+    EF517 %in% c(550, 640, 650, 740, 800) ~ "ISCED-6",
+    EF517 %in% c(740) ~ "ISCED-7",
+    EF517 %in% c(800) ~ "ISCED-8"))
+
+data_2018 <- data_2018 %>%
+  mutate(highest_education = case_when(
+    EF517 %in% c(100, 244) ~ "Low",
+    EF517 %in% c(344, 353, 354, 453, 454) ~ "Medium",
+    EF517 %in% c(550, 640, 650, 740, 800) ~ "High")) %>%
+  select(-EF517)
+
+# migration_background: EF2001
+data_2018 <- data_2018 %>%
+  mutate(migration_background = case_when(
+    EF2001 %in% c(0) ~ "No migration background",
+    EF2001 %in% c(16:31, 41, 51, 61, 81) ~ "Foreign born",
+    T ~ "Migration background")) %>%
+  select(-EF2001)
+
+# urban_residence: EF563
+data_2018 <- data_2018 %>%
+  mutate(urban_residence = case_when(
+    EF563 %in% c(1, 2, 4) ~ "Rural and semi-urban residence",
+    EF563 %in% c(3, 5, 6, 7, 8, 9) ~ "Urban residence")) %>%
+  select(-EF563)
+
+# has_children: EF865
+data_2018 <- data_2018 %>%
+  mutate(has_children = case_when(
+    EF865 %in% c(1, 4, 7, 9) ~ "Has children",
+    EF865 %in% c(2, 5, 6, 8) ~ "No children")) %>%
+  select(-EF865)
+
+# survey_weight: EF952
+data_2018 <- data_2018 %>%
+  mutate(survey_weight = as.numeric(EF952)) %>%
+  select(-EF952)
+
+# job_status_last_year: EF443 
+data_2018 <- data_2018 %>%
+  mutate(job_status_last_year = case_when(
+    EF443 %in% c(1, 2, 3, 4) ~ "Employed",
+    EF443 %in% c(10) ~ "Unemployed",
+    EF443 %in% c(12) ~ "Retired",
+    EF443 %in% c(5, 7, 8, 11, 12, 13, 14) ~ "Inactive"))
+
+# disability: EF2700 
+data_2018 <- data_2018 %>%
+  mutate(disability = ifelse(EF2700 == 1, 1, 0)) %>%
+  select(-EF2700)
+
+# relation: EF710
+data_2018 <- data_2018 %>%
+  mutate(relation = case_when(
+    EF710 %in% c(1) ~ "Respondent",
+    EF710 %in% c(2) ~ "Partner",
+    T ~ "Other")) %>%
+  select(-EF710)
+
+# position: EF35
+data_2018 <- data_2018 %>%
+  mutate(position = as.numeric(EF35)) %>%
+  select(-EF35)
+
+```
+
+# 2019
+```{r}
+data_2019 <- import(".../mz2019.dta")
+
+data_2019 <- data_2019 %>% 
+  select(ID, idhhx, EF44, EF46, EF47, EF1, EF114, EF94, EF49, EF20, EF66, EF83, EF90, EF106, EF93, EF96, EF117, EF120, EF121, EF122, EF127, EF129, EF517, EF2001, EF541, EF521, EF2700, EF952, EF563, EF865, EF443, EF35, EF710) %>% 
+  mutate(year = 2019)
+
+# person_id
+data_2019 <- data_2019 %>%
+  mutate(person_id = as.character(ID)) %>%
+  select(-ID)
+
+# household_id
+data_2019 <- data_2019 %>%
+  mutate(household_id = as.character(idhhx)) %>%
+  select(-idhhx)
+
+# age: EF44
+data_2019 <- data_2019 %>%
+  mutate(age = as.numeric(EF44)) %>%
+  select(-EF44)
+
+# sex: EF46
+data_2019 <- data_2019 %>%
+  mutate(sex = case_when(
+    EF46 == 1 ~ "Male",
+    EF46 == 2 ~ "Female")) %>%
+  select(-EF46)
+
+# birth_year: EF47
+data_2019 <- data_2019 %>%
+  mutate(birth_year = as.numeric(EF47)) %>%
+  select(-EF47)
+
+# state: EF1
+data_2019 <- data_2019 %>%
+  mutate(state = case_when(
+    EF1 == 1 ~ "Schleswig-Holstein",
+    EF1 == 2 ~ "Hamburg",
+    EF1 == 3 ~ "Niedersachsen",
+    EF1 == 4 ~ "Bremen",
+    EF1 == 5 ~ "Nordrhein-Westfalen",
+    EF1 == 6 ~ "Hessen",
+    EF1 == 7 ~ "Rheinland-Pfalz",
+    EF1 == 8 ~ "Baden-Württemberg",
+    EF1 == 9 ~ "Bayern",
+    EF1 == 10 ~ "Saarland",
+    EF1 == 11 ~ "Berlin",
+    EF1 == 12 ~ "Brandenburg",
+    EF1 == 13 ~ "Mecklenburg-Vorpommern",
+    EF1 == 14 ~ "Sachsen",
+    EF1 == 15 ~ "Sachsen-Anhalt",
+    EF1 == 16 ~ "Thüringen"))
+
+# east_germany
+data_2019 <- data_2019 %>%
+  mutate(east_germany = ifelse(EF1 %in% c(1, 12, 13, 14, 15, 16), 1, 0)) %>%
+  select(-EF1)
+
+# family_status: EF49
+data_2019 <- data_2019 %>%
+  mutate(family_status = case_when(
+    EF49 %in% c(1) ~ "Single",
+    EF49 %in% c(2, 5) ~ "Married/With partner",
+    EF49 %in% c(3, 6) ~ "Widowed",
+    EF49 %in% c(4, 7) ~ "Divorced")) %>%
+  select(-EF49)
+
+# hh_size: EF20
+data_2019 <- data_2019 %>%
+  mutate(hh_size = as.numeric(EF20)) %>%
+  select(-EF20)
+
+# EF127
+# part_full_time: EF129
+data_2019 <- data_2019 %>%
+  mutate(job_status = case_when(
+    EF66 %in% c(1, 2, 3, 4, 5, 14, 16, 17) & EF129 %in% c(1) ~ "Full-time employed",
+    EF66 %in% c(1, 2, 3, 4, 5, 14, 16, 17) & EF129 %in% c(2) ~ "Part-time employed",
+    EF66 %in% c(10) ~ "Unemployed",
+    EF66 %in% c(9) ~ "Retired",
+    EF66 %in% c(7, 8, 11, 12, 13, 15) ~ "Inactive")) %>%
+  select(-EF66)
+
+# never_worked: EF83
+data_2019 <- data_2019 %>%
+  mutate(never_worked = ifelse(EF83 %in% c(8), 1, 0)) %>%
+  select(-EF83)
+
+# current_job_kldb: EF114
+data_2019 <- data_2019 %>%
+  mutate(current_job_kldb = as.character(EF114),
+         current_job_kldb = ifelse(current_job_kldb %in% c("-1", "-2", "-3", "-4", "-5", "-6", "-7", "-8", "9999"), NA, current_job_kldb)) %>%
+  select(-EF114)
+
+# current_job_isco: EF541
+data_2019 <- data_2019 %>%
+  mutate(current_job_isco = as.character(EF541),
+         current_job_isco = ifelse(current_job_isco %in% c("-1", "-2", "-3", "-4", "-5", "-6", "-7", "-8", "9999"), NA, current_job_isco)) %>%
+  select(-EF541)
+
+# current_job_selfemployed: 
+data_2019 <- data_2019 %>%
+  mutate(current_job_selfemployed = ifelse(EF117 %in% c(1, 2), 1, 0)) %>%
+  select(-EF117)
+
+# current_job_supervisor: EF120
+data_2019 <- data_2019 %>%
+  mutate(current_job_supervisor = ifelse(EF120 %in% c(8), 0, 1)) %>%
+  select(-EF120)
+
+# current_job_public_sector: EF121
+data_2019 <- data_2019 %>%
+  mutate(current_job_public_sector = ifelse(EF121 %in% c(1), 1, 0)) %>%
+  select(-EF121)
+
+# last_job_kldb: EF94
+data_2019 <- data_2019 %>%
+  mutate(last_job_kldb = as.character(EF94),
+         last_job_kldb = ifelse(last_job_kldb %in% c("-1", "-2", "-3", "-4", "-5", "-6", "-7", "-8", "9999"), NA, last_job_kldb)) %>%
+  select(-EF94)
+
+# last_job_isco: EF521
+data_2019 <- data_2019 %>%
+  mutate(last_job_isco = as.character(EF521),
+         last_job_isco = ifelse(last_job_isco %in% c("-1", "-2", "-3", "-4", "-5", "-6", "-7", "-8", "9999"), NA, last_job_isco)) %>%
+  select(-EF521)
+
+# last_job_selfemployed: EF93
+data_2019 <- data_2019 %>%
+  mutate(last_job_selfemployed = ifelse(EF93 %in% c(1, 2), 1, 0)) %>%
+  select(-EF93)
+
+# last_job_supervisor: EF96
+data_2019 <- data_2019 %>%
+  mutate(last_job_supervisor = case_when(
+    !EF96 %in% c(8) ~ 1)) %>%
+  select(-EF96)
+
+# last_job_public_sector: EF106
+data_2019 <- data_2019 %>%
+  mutate(last_job_public_sector = ifelse(EF106 %in% c(1), 1, 0)) %>%
+  select(-EF106)
+
+# last_job_year: EF90
+data_2019 <- data_2019 %>%
+  mutate(last_job_year = ifelse(EF90 %in% c(1900:2020), EF90, NA)) %>%
+  select(-EF90)
+
+# job_kldb
+data_2019 <- data_2019 %>%
+  mutate(job_kldb = ifelse(is.na(current_job_kldb), last_job_kldb, current_job_kldb),
+         job_kldb = substr(job_kldb, 1, 3))
+
+# job_isco
+data_2019 <- data_2019 %>%
+  mutate(job_isco = ifelse(is.na(current_job_isco), last_job_isco, current_job_isco))
+
+# job_selfemployed
+data_2019 <- data_2019 %>%
+  mutate(job_selfemployed = ifelse(is.na(current_job_selfemployed), last_job_selfemployed, current_job_selfemployed))
+
+# job_public_sector
+data_2019 <- data_2019 %>%
+  mutate(job_public_sector = ifelse(is.na(last_job_public_sector), last_job_public_sector, current_job_public_sector))
+
+# job_supervisor
+data_2019 <- data_2019 %>%
+  mutate(job_supervisor = ifelse(is.na(current_job_supervisor), last_job_supervisor, current_job_supervisor))
+
+# highest_education: EF517
+data_2019 <- data_2019 %>%
+  mutate(highest_education_detailed = case_when(
+    EF517 %in% c(100) ~ "ISCED-1",
+    EF517 %in% c(244) ~ "ISCED-2",
+    EF517 %in% c(344, 353, 354) ~ "ISCED-3",
+    EF517 %in% c(453, 454) ~ "ISCED-4",
+    EF517 %in% c(550) ~ "ISCED-5",
+    EF517 %in% c(640, 650) ~ "ISCED-6",
+    EF517 %in% c(740) ~ "ISCED-7",
+    EF517 %in% c(800) ~ "ISCED-8"))
+
+data_2019 <- data_2019 %>%
+  mutate(highest_education = case_when(
+    EF517 %in% c(100, 244) ~ "Low",
+    EF517 %in% c(344, 353, 354, 453, 454) ~ "Medium",
+    EF517 %in% c(550, 640, 650, 740, 800) ~ "High")) %>%
+  select(-EF517)
+
+# migration_background: EF2001
+data_2019 <- data_2019 %>%
+  mutate(migration_background = case_when(
+    EF2001 %in% c(0) ~ "No migration background",
+    EF2001 %in% c(16:31, 41, 51, 61, 81) ~ "Foreign born",
+    T ~ "Migration background")) %>%
+  select(-EF2001)
+
+# urban_residence: EF563
+data_2019 <- data_2019 %>%
+  mutate(urban_residence = case_when(
+    EF563 %in% c(1, 2, 4) ~ "Rural and semi-urban residence",
+    EF563 %in% c(3, 5, 6, 7, 8, 9) ~ "Urban residence")) %>%
+  select(-EF563)
+
+# has_children: EF865
+data_2019 <- data_2019 %>%
+  mutate(has_children = case_when(
+    EF865 %in% c(1, 4, 7, 9) ~ "Has children",
+    EF865 %in% c(2, 5, 6, 8) ~ "No children")) %>%
+  select(-EF865)
+
+# survey_weight: EF952
+data_2019 <- data_2019 %>%
+  mutate(survey_weight = as.numeric(EF952)) %>%
+  select(-EF952)
+
+# job_status_last_year: EF443 
+data_2019 <- data_2019 %>%
+  mutate(job_status_last_year = case_when(
+    EF443 %in% c(1, 2, 3, 4) ~ "Employed",
+    EF443 %in% c(10) ~ "Unemployed",
+    EF443 %in% c(12) ~ "Retired",
+    EF443 %in% c(5, 7, 8, 11, 12, 13, 14) ~ "Inactive"))
+
+# disability: EF2700 
+data_2019 <- data_2019 %>%
+  mutate(disability = ifelse(EF2700 == 1, 1, 0)) %>%
+  select(-EF2700)
+
+# relation: EF710
+data_2019 <- data_2019 %>%
+  mutate(relation = case_when(
+    EF710 %in% c(1) ~ "Respondent",
+    EF710 %in% c(2) ~ "Partner",
+    T ~ "Other")) %>%
+  select(-EF710)
+
+# position: EF35
+data_2019 <- data_2019 %>%
+  mutate(position = as.numeric(EF35)) %>%
+  select(-EF35)
+
+```
+
+# 2020
+```{r}
+data_2020 <- import(".../mz2020.dta")
+
+data_2020 <- data_2020 %>% 
+  select(TH0603P, DD0100P, DI0100P, HR000JJ, TL0102L, GemeindeGroessenKlasse, TM0001P, TB0004P, EJ0702P, EJ1400P, EJ1200P, EJ0800P, EJ1003P, EB1400P, EB0500P, ED0600P, EB0203P, EJ0100P, EA0200P, EA0300P, NpersHH, AB0500P, LAND, AB0302P, TPGeschlecht, TPALTER_1, idhhx, ID, TL0101P) %>% 
+  mutate(year = 2020)
+
+# person_id
+data_2020 <- data_2020 %>%
+  mutate(person_id = as.character(ID)) %>%
+  select(-ID)
+
+# household_id
+data_2020 <- data_2020 %>%
+  mutate(household_id = as.character(idhhx)) %>%
+  select(-idhhx)
+
+# age: TPALTER_1
+data_2020 <- data_2020 %>%
+  mutate(age = as.numeric(TPALTER_1)) %>%
+  select(-TPALTER_1)
+
+# sex: TPGeschlecht
+data_2020 <- data_2020 %>%
+  mutate(sex = case_when(
+    TPGeschlecht == 1 ~ "Male",
+    TPGeschlecht == 2 ~ "Female")) %>%
+  select(-TPGeschlecht)
+
+# birth_year: AB0302P
+data_2020 <- data_2020 %>%
+  mutate(birth_year = as.numeric(AB0302P)) %>%
+  select(-AB0302P)
+
+# state: LAND
+data_2020 <- data_2020 %>%
+  mutate(state = case_when(
+    LAND == 1 ~ "Schleswig-Holstein",
+    LAND == 2 ~ "Hamburg",
+    LAND == 3 ~ "Niedersachsen",
+    LAND == 4 ~ "Bremen",
+    LAND == 5 ~ "Nordrhein-Westfalen",
+    LAND == 6 ~ "Hessen",
+    LAND == 7 ~ "Rheinland-Pfalz",
+    LAND == 8 ~ "Baden-Württemberg",
+    LAND == 9 ~ "Bayern",
+    LAND == 10 ~ "Saarland",
+    LAND == 11 ~ "Berlin",
+    LAND == 12 ~ "Brandenburg",
+    LAND == 13 ~ "Mecklenburg-Vorpommern",
+    LAND == 14 ~ "Sachsen",
+    LAND == 15 ~ "Sachsen-Anhalt",
+    LAND == 16 ~ "Thüringen"))
+
+# east_germany
+data_2020 <- data_2020 %>%
+  mutate(east_germany = ifelse(LAND %in% c(1, 12, 13, 14, 15, 16), 1, 0)) %>%
+  select(-LAND)
+
+# family_status: AB0500P
+data_2020 <- data_2020 %>%
+  mutate(family_status = case_when(
+    AB0500P %in% c(1) ~ "Single",
+    AB0500P %in% c(2, 5) ~ "Married/With partner",
+    AB0500P %in% c(3, 6) ~ "Widowed",
+    AB0500P %in% c(4, 7) ~ "Divorced")) %>%
+  select(-AB0500P)
+
+# hh_size: NpersHH
+data_2020 <- data_2020 %>%
+  mutate(hh_size = as.numeric(NpersHH)) %>%
+  select(-NpersHH)
+
+# EF127
+# part_full_time: EF129
+data_2020 <- data_2020 %>%
+  mutate(job_status = case_when(
+    EA0200P %in% c(1:8) & EA0300P %in% c(1) ~ "Full-time employed",
+    EA0200P %in% c(1:8) & EA0300P %in% c(2) ~ "Part-time employed",
+    EA0200P %in% c(14) ~ "Unemployed",
+    EA0200P %in% c(13) ~ "Retired",
+    EA0200P %in% c(9, 10, 11, 12, 15, 16, 17) ~ "Inactive")) %>%
+  select(-EA0200P)
+
+# never_worked: EJ0100P
+data_2020 <- data_2020 %>%
+  mutate(never_worked = ifelse(EJ0100P %in% c(8), 1, 0)) %>%
+  select(-EJ0100P)
+
+# current_job_kldb: EB0203P
+data_2020 <- data_2020 %>%
+  mutate(current_job_kldb = as.character(EB0203P),
+         current_job_kldb = ifelse(current_job_kldb %in% c("-1", "-2", "-3", "-4", "-5", "-6", "-7", "-8", "9999"), NA, current_job_kldb)) %>%
+  select(-EB0203P)
+
+# current_job_selfemployed: ED0600P
+data_2020 <- data_2020 %>%
+  mutate(current_job_selfemployed = ifelse(ED0600P %in% c(1, 2), 1, 0)) %>%
+  select(-ED0600P)
+
+# current_job_supervisor: EB0500P
+data_2020 <- data_2020 %>%
+  mutate(current_job_supervisor = ifelse(EB0500P %in% c(8), 0, 1)) %>%
+  select(-EB0500P)
+
+# current_job_public_sector: EB1400P
+data_2020 <- data_2020 %>%
+  mutate(current_job_public_sector = ifelse(EB1400P %in% c(1), 1, 0)) %>%
+  select(-EB1400P)
+
+# last_job_kldb: EJ1003P
+data_2020 <- data_2020 %>%
+  mutate(last_job_kldb = as.character(EJ1003P),
+         last_job_kldb = ifelse(last_job_kldb %in% c("-1", "-2", "-3", "-4", "-5", "-6", "-7", "-8", "9999"), NA, last_job_kldb)) %>%
+  select(-EJ1003P)
+
+# last_job_selfemployed: EJ0800P
+data_2020 <- data_2020 %>%
+  mutate(last_job_selfemployed = ifelse(EJ0800P %in% c(1, 2), 1, 0)) %>%
+  select(-EJ0800P)
+
+# last_job_supervisor: EJ1200P
+data_2020 <- data_2020 %>%
+  mutate(last_job_supervisor = case_when(
+    EJ1200P %in% c(1, 2) ~ 1,
+    T ~ 0)) %>%
+  select(-EJ1200P)
+
+# last_job_public_sector: EJ1400P
+data_2020 <- data_2020 %>%
+  mutate(last_job_public_sector = ifelse(EJ1400P %in% c(1), 1, 0)) %>%
+  select(-EJ1400P)
+
+# last_job_year: EJ0702P
+data_2020 <- data_2020 %>%
+  mutate(last_job_year = ifelse(EJ0702P %in% c(1900:2020), EJ0702P, NA)) %>%
+  select(-EJ0702P)
+
+# job_kldb
+data_2020 <- data_2020 %>%
+  mutate(job_kldb = ifelse(is.na(current_job_kldb), last_job_kldb, current_job_kldb),
+         job_kldb = substr(job_kldb, 1, 3))
+
+# job_selfemployed
+data_2020 <- data_2020 %>%
+  mutate(job_selfemployed = ifelse(is.na(current_job_selfemployed), last_job_selfemployed, current_job_selfemployed))
+
+# job_public_sector
+data_2020 <- data_2020 %>%
+  mutate(job_public_sector = ifelse(is.na(last_job_public_sector), last_job_public_sector, current_job_public_sector))
+
+# job_supervisor
+data_2020 <- data_2020 %>%
+  mutate(job_supervisor = ifelse(is.na(current_job_supervisor), last_job_supervisor, current_job_supervisor))
+
+# highest_education: TB0004P
+data_2020 <- data_2020 %>%
+  mutate(highest_education_detailed = case_when(
+    TB0004P %in% c(100) ~ "ISCED-1",
+    TB0004P %in% c(244) ~ "ISCED-2",
+    TB0004P %in% c(344, 353, 354) ~ "ISCED-3",
+    TB0004P %in% c(453, 454) ~ "ISCED-4",
+    TB0004P %in% c(550) ~ "ISCED-5",
+    TB0004P %in% c(640, 650) ~ "ISCED-6",
+    TB0004P %in% c(740) ~ "ISCED-7",
+    TB0004P %in% c(800) ~ "ISCED-8"))
+
+data_2020 <- data_2020 %>%
+  mutate(highest_education = case_when(
+    TB0004P %in% c(100, 244) ~ "Low",
+    TB0004P %in% c(344, 353, 354, 453, 454) ~ "Medium",
+    TB0004P %in% c(550, 640, 650, 740, 800) ~ "High")) %>%
+  select(-TB0004P)
+
+# migration_background: TM0001P
+data_2020 <- data_2020 %>%
+  mutate(migration_background = case_when(
+    TM0001P %in% c(0) ~ "No migration background",
+    TM0001P %in% c(16:31, 41, 51, 61, 81) ~ "Foreign born",
+    T ~ "Migration background")) %>%
+  select(-TM0001P)
+
+# urban_residence: GemeindeGroessenKlasse
+data_2020 <- data_2020 %>%
+  mutate(urban_residence = case_when(
+    GemeindeGroessenKlasse %in% c(1, 2, 4) ~ "Rural and semi-urban residence",
+    GemeindeGroessenKlasse %in% c(3, 5, 6, 7, 8, 9) ~ "Urban residence")) %>%
+  select(-GemeindeGroessenKlasse)
+
+# has_children: TL0102L
+data_2020 <- data_2020 %>%
+  mutate(has_children = case_when(
+    TL0102L %in% c(1, 2, 3, 4, 5) ~ "Has children",
+    TL0102L %in% c(6, 7, 8, 9, 10) ~ "No children")) %>%
+  select(-TL0102L)
+
+# survey_weight: HR000JJ
+data_2020 <- data_2020 %>%
+  mutate(survey_weight = as.numeric(HR000JJ)) %>%
+  select(-HR000JJ)
+
+# job_status_last_year: DI0100P 
+data_2020 <- data_2020 %>%
+  mutate(job_status_last_year = case_when(
+    DI0100P %in% c(1, 2, 3, 4) ~ "Employed",
+    DI0100P %in% c(10) ~ "Unemployed",
+    DI0100P %in% c(9) ~ "Retired",
+    DI0100P %in% c(5, 6, 7, 8, 11, 12) ~ "Inactive"))
+
+# disability: DD0100P 
+data_2020 <- data_2020 %>%
+  mutate(disability = ifelse(DD0100P == 1, 1, 0)) %>%
+  select(-DD0100P)
+
+# relation: TH0603P
+data_2020 <- data_2020 %>%
+  mutate(relation = case_when(
+    TH0603P %in% c(1) ~ "Respondent",
+    TH0603P %in% c(2) ~ "Partner",
+    T ~ "Other")) %>%
+  select(-TH0603P)
+
+# position: EF35
+data_2020 <- data_2020 %>%
+  mutate(position = as.numeric(TL0101P)) %>%
+  select(-TL0101P)
+
+```
+
+# combine
+```{r}
+data_combined <- bind_rows(data_2015, data_2016, data_2017, data_2018, data_2019, data_2020)
+
+rm(data_2015, data_2016, data_2017, data_2018, data_2019, data_2020)
+
+```
+
+```{r}
+
+# position_kldb_1
+# position_kldb_2
+data_combined <- data_combined %>% 
+  mutate(job_kldb_1 = as.character(substr(job_kldb, 1, 1)),
+         position_kldb_1 = case_when(
+           job_kldb_1 %in% c("1") ~ "(1) Land-, Forst- und Tierwirtschaft und Gartenbau",
+           job_kldb_1 %in% c("2") ~ "(2) Rohstoffgewinnung, Produktion und Fertigung",
+           job_kldb_1 %in% c("3") ~ "(3) Bau, Architektur, Vermessung und Gebäudetechnik",
+           job_kldb_1 %in% c("4") ~ "(4) Naturwissenschaft, Geografie und Informatik",
+           job_kldb_1 %in% c("5") ~ "(5) Verkehr, Logistik, Schutz und Sicherheit",
+           job_kldb_1 %in% c("6") ~ "(6) Kaufmännische Dienstleistungen, Warenhandel, Vertrieb, Hotel und Tourismus",
+           job_kldb_1 %in% c("7") ~ "(7) Unternehmensorganisation, Buchhaltung, Recht und Verwaltung",
+           job_kldb_1 %in% c("8") ~ "(8) Gesundheit, Soziales, Lehre und Erziehung",
+           job_kldb_1 %in% c("9") ~ "(9) Sprach-, Literatur-, Geistes-, Gesellschafts- und Wirtschaftswissenschaften, Medien, Kunst, Kultur und Gestaltung",
+           job_kldb_1 %in% c("0") ~ "(10) Militär")) %>%
+  select(-job_kldb_1)
+
+data_combined <- data_combined %>% 
+  mutate(job_kldb_2 = as.character(substr(job_kldb, 1, 2)),
+         position_kldb_2 = case_when(
+           job_kldb_2 %in% c("01") ~ "(01) Angehörige der regulären Streitkräfte",
+           job_kldb_2 %in% c("11") ~ "(11) Land-, Tier- und Forstwirtschaftsberufe",
+           job_kldb_2 %in% c("12") ~ "(12) Gartenbauberufe und Floristik",
+           job_kldb_2 %in% c("21") ~ "(21) Rohstoffgewinnung und -aufbereitung, Glas- und Keramikherstellung und -verarbeitung",
+           job_kldb_2 %in% c("22") ~ "(22) Kunststoffherstellung und -verarbeitung, Holzbe- und -verarbeitung",
+           job_kldb_2 %in% c("23") ~ "(23) Papier- und Druckberufe, technische Mediengestaltung",
+           job_kldb_2 %in% c("24") ~ "(24) Metallerzeugung und -bearbeitung, Metallbauberufe",
+           job_kldb_2 %in% c("25") ~ "(25) Maschinen- und Fahrzeugtechnikberufe",
+           job_kldb_2 %in% c("26") ~ "(26) Mechatronik-, Energie- und Elektroberufe",
+           job_kldb_2 %in% c("27") ~ "(27) Technische Forschungs-, Entwicklungs-, Konstruktions- und Produktionssteuerungsberufe",
+           job_kldb_2 %in% c("28") ~ "(28) Textil- und Lederberufe",
+           job_kldb_2 %in% c("29") ~ "(29) Lebensmittelherstellung und -verarbeitung",
+           job_kldb_2 %in% c("31") ~ "(31) Bauplanungs-, Architektur- und Vermessungsberufe",
+           job_kldb_2 %in% c("32") ~ "(32) Hoch- und Tiefbauberufe",
+           job_kldb_2 %in% c("33") ~ "(33) (Innen-)Ausbauberufe",
+           job_kldb_2 %in% c("34") ~ "(34) Gebäude- und versorgungstechnische Berufe",
+           job_kldb_2 %in% c("41") ~ "(41) Mathematik-, Biologie-, Chemie- und Physikberufe",
+           job_kldb_2 %in% c("42") ~ "(42) Geologie-, Geografie- und Umweltschutzberufe",
+           job_kldb_2 %in% c("43") ~ "(43) Informatik-, Informations- und Kommunikationstechnologieberufe",
+           job_kldb_2 %in% c("51") ~ "(51) Verkehrs- und Logistikberufe (außer Fahrzeugführung)",
+           job_kldb_2 %in% c("52") ~ "(52) Führer/innen von Fahrzeug- und Transportgeräten",
+           job_kldb_2 %in% c("53") ~ "(53) Schutz-, Sicherheits- und Überwachungsberufe",
+           job_kldb_2 %in% c("54") ~ "(54) Reinigungsberufe",
+           job_kldb_2 %in% c("61") ~ "(61) Einkaufs-, Vertriebs- und Handelsberufe",
+           job_kldb_2 %in% c("62") ~ "(62) Verkaufsberufe",
+           job_kldb_2 %in% c("63") ~ "(63) Tourismus-, Hotel- und Gaststättenberufe",
+           job_kldb_2 %in% c("71") ~ "(71) Berufe in Unternehmensführung und -organisation",
+           job_kldb_2 %in% c("72") ~ "(72) Berufe in Finanzdienstleistungen, Rechnungswesen und Steuerberatung",
+           job_kldb_2 %in% c("73") ~ "(73) Berufe in Recht und Verwaltung",
+           job_kldb_2 %in% c("81") ~ "(81) Medizinische Gesundheitsberufe",
+           job_kldb_2 %in% c("82") ~ "(82) Nichtmedizinische Gesundheits-, Körperpflege- und Wellnessberufe, Medizintechnik",
+           job_kldb_2 %in% c("83") ~ "(83) Erziehung, soziale und hauswirtschaftliche Berufe, Theologie",
+           job_kldb_2 %in% c("84") ~ "(84) Lehrende und ausbildende Berufe",
+           job_kldb_2 %in% c("91") ~ "(91) Sprach-, literatur-, geistes-, gesellschafts- und wirtschaftswissenschaftliche Berufe",
+           job_kldb_2 %in% c("92") ~ "(92) Werbung, Marketing, kaufmännische und redaktionelle Medienberufe",
+           job_kldb_2 %in% c("93") ~ "(93) Produktdesign und kunsthandwerkliche Berufe, bildende Kunst, Musikinstrumentenbau",
+           job_kldb_2 %in% c("94") ~ "(94) Darstellende und unterhaltende Berufe")) %>%
+  select(-job_kldb_2)
+
+```
+
+```{r}
+# partner employed
+partner <- data_combined %>% 
+  filter(position %in% c(1, 2), relation %in% c("Respondent", "Partner"), family_status %in% c("Married/With partner")) %>% 
+  select(year, person_id, household_id, age, sex, family_status, job_status) %>%
+  unique() %>%
+  ungroup()
+
+partner <- partner %>% 
+  left_join(partner, by = "household_id") %>% 
+  group_by(year.x, person_id.x) %>% slice(1) %>% 
+  select(person_id.x, year.x, job_status.y)
+
+colnames(partner) <- c("person_id", "year", "partner_job_status")
+
+data_combined <- data_combined %>% left_join(partner, by = c("person_id", "year"))
+
+data_combined$partner_job_status <- ifelse(data_combined$family_status != "Married/With partner", "No partner", data_combined$partner_job_status)
+
+data_combined$partner_job_status <- ifelse(data_combined$partner_job_status %in% c("Full-time employed", "Part-time employed"), "Employed", data_combined$partner_job_status)
+
+rm(partner)
+
+```
+
+# finalise
+```{r}
+data_combined <- data_combined %>% filter(age %in% c(55:64))
+
+data_sample <- data_combined %>% filter(never_worked != 1)
+
+data_sample <- data_sample %>% select(person_id, household_id, year, birth_year, age, sex, state, east_germany, urban_residence, job_status, highest_education, highest_education_detailed, family_status, has_children, hh_size, migration_background, partner_job_status, position_kldb_1, position_kldb_2, survey_weight)
+
+data_final <- data_sample %>% ungroup() %>% na.omit()
+
+data_final <- data_final %>% mutate(person_id = paste0(year, "_", 1:nrow(.))) %>% select(person_id, household_id, year, birth_year, age, sex, state, east_germany, urban_residence, job_status, highest_education, highest_education_detailed, family_status, has_children, hh_size, migration_background, partner_job_status, position_kldb_1, position_kldb_2, survey_weight)
+
+data_final <- data_final %>% arrange(year, household_id)
+
+rm(data_combined, data_sample)
+
+```
+
+```{r}
+save.image("data_final.Rdata")
+
+```

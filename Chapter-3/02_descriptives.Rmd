@@ -1,0 +1,237 @@
+---
+title: "02_descriptives"
+---
+
+```{r setup}
+library("tidyverse")
+library("marginaleffects")
+library("tidytext")
+library("nnet")
+library("gtsummary")
+library("survey")
+library("stargazer")
+library("segregation")
+library("estimatr")
+
+options("scipen" = 100, "digits" = 4)
+
+rm(list = ls())
+
+```
+
+# descriptives
+```{r}
+
+load(".../data_final.Rdata")
+
+desc <- survey::svydesign(~ 1, data = data_final, weights = ~ survey_weight) %>%
+  tbl_svysummary(
+    include = c(year, birth_year, age, job_status, highest_education_detailed, family_status, has_children, hh_size, migration_background, partner_job_status, urban_residence, state, position_kldb_2),
+    statistic = list(all_categorical() ~ "{p}", all_continuous() ~ "{mean} ({sd})"),
+    digits = ~ 1)
+
+```
+
+# prevalences
+```{r}
+rm(list = ls())
+
+load(".../data_final.Rdata")
+
+##########################
+#### EMPLOYMENT RATES ####
+##########################
+
+data_final$outcome <- ifelse(data_final$job_status %in% c("Full-time employed", "Part-time employed"), 1, 0)
+
+prevalence <- lm_robust(outcome ~ position_kldb_2, weights = survey_weight, data_final)
+
+pred_prevalence <- data_final %>% select(position_kldb_2) %>% unique()
+
+pred_prevalence <- cbind(pred_prevalence, predict(prevalence, newdata = pred_prevalence, interval = "confidence"))
+
+pred_prevalence <- pred_prevalence %>% 
+  mutate(occupation_code = substr(position_kldb_2, 2, 3),
+         type = "Prevalence")
+
+plot_rates <- ggplot(pred_prevalence, aes(x = reorder(occupation_code, fit.fit), y = fit.fit * 100)) +
+  facet_grid(~type) +
+  geom_bar(stat = "identity", fill = "darkblue", alpha = 0.7) +
+  geom_errorbar(aes(ymin = fit.lwr * 100, ymax = fit.upr * 100), width = 0.4) +
+  scale_x_reordered("Occupational position") +
+  scale_y_continuous("Prevalence (%)") +
+  coord_flip() +
+  theme_linedraw() +
+  theme(legend.position = "bottom", 
+        text = element_text(colour = "black"),
+        legend.title=element_blank(), 
+        legend.text = element_text(colour = "black", size = 14),
+        axis.title.x = element_text(colour = "black", face = "bold", size = 12),
+        axis.title.y = element_text(colour = "black", face = "bold", size = 12),
+        axis.text.x = element_text(colour = "black", size = 12),
+        axis.text.y = element_text(colour = "black", size = 12),
+        strip.text = element_text(colour = 'White', size = 13),
+        panel.background = element_rect(fill = "transparent", colour = NA_character_),
+        plot.background = element_rect(fill = "transparent", colour = NA_character_),
+        legend.background = element_rect(fill = "transparent"),
+        legend.key = element_rect(fill = "transparent"))
+ggsave(".../desc_rates.pdf", height = 6.2, width = 4)
+
+##########################
+###### ASSOCIATIONS ######
+##########################
+
+data_final$outcome <- ifelse(data_final$job_status %in% c("Full-time employed", "Part-time employed"), 1, 0)
+
+data_final$position_kldb_2 <- relevel(as.factor(data_final$position_kldb_2), ref = "(71) Berufe in Unternehmensführung und -organisation")
+
+model_total <- lm_robust(outcome ~ position_kldb_2 + sex + age + birth_year + state + urban_residence + highest_education + family_status + has_children + hh_size + migration_background + partner_job_status, weights = survey_weight, data_final)
+
+model_total <- model_total %>% tidy() %>% filter(grepl("position_kldb_2", term)) %>% mutate(type = "Controlled associations")
+
+model_female <- lm_robust(outcome ~ position_kldb_2 + age + birth_year + state + urban_residence + highest_education + family_status + has_children + hh_size + migration_background + partner_job_status, weights = survey_weight, data_final %>% filter(sex == "Female"))
+
+model_female <- model_female %>% tidy() %>% filter(grepl("position_kldb_2", term)) %>% mutate(group = "Female population", type = "Controlled associations")
+
+model_male <- lm_robust(outcome ~ position_kldb_2 + age + birth_year + state + urban_residence + highest_education + family_status + has_children + hh_size + migration_background + partner_job_status, weights = survey_weight, data_final %>% filter(sex == "Male"))
+
+model_male <- model_male %>% tidy() %>% filter(grepl("position_kldb_2", term)) %>% mutate(group = "Male population", type = "Controlled associations")
+
+assocations <- rbind(model_female, model_male) %>% mutate(term = substr(term, 17, 18))
+
+assocations <- model_total %>% mutate(term = substr(term, 17, 18)) %>% select(term, estimate, conf.low, conf.high, outcome, type)
+
+assocations <- rbind(assocations, c("71", 0, 0, 0, "outcome", "Controlled associations"))
+
+ggplot(assocations, aes(x = reorder(term, as.numeric(estimate)), y = as.numeric(estimate))) +
+  facet_grid(~type) +
+  geom_hline(yintercept = 0) +
+  geom_pointrange(aes(ymin = as.numeric(conf.low), ymax = as.numeric(conf.high)), position = position_dodge(width = 0.5), size = 0.25) +
+  scale_x_reordered("Occupational position") +
+  scale_color_manual(values = c("darkred", "darkblue")) +
+  scale_y_continuous("LPM coefficient") +
+  coord_flip() +
+  theme_linedraw() +
+  theme(legend.position = "bottom", 
+        text = element_text(colour = "black"),
+        legend.title=element_blank(), 
+        legend.text = element_text(colour = "black", size = 14),
+        axis.title.x = element_text(colour = "black", face = "bold", size = 12),
+        axis.title.y = element_text(colour = "black", face = "bold", size = 12),
+        axis.text.x = element_text(colour = "black", size = 12),
+        axis.text.y = element_text(colour = "black", size = 12),
+        strip.text = element_text(colour = 'White', size = 13),
+        panel.background = element_rect(fill = "transparent", colour = NA_character_),
+        plot.background = element_rect(fill = "transparent", colour = NA_character_),
+        legend.background = element_rect(fill = "transparent"),
+        legend.key = element_rect(fill = "transparent"))
+ggsave(".../desc_assoc.pdf", height = 6.2, width = 4)
+
+```
+
+```{r}
+rm(list = ls())
+
+load(".../data_final.Rdata")
+
+results <-
+  survey::svydesign(~ 1, data = data_final, weights = ~ survey_weight) %>%
+  tbl_svysummary(
+    by = sex,
+    include = c(sex, year, birth_year, job_status, state, urban_residence, highest_education, family_status, has_children, hh_size, migration_background, partner_job_status, age, birth_year, hh_size, position_kldb_2),
+    statistic = list(all_categorical() ~ "{p}", all_continuous() ~ "{mean} ({sd})"),
+    digits = ~ 1) %>% add_overall()
+
+```
+
+# dissimilarity
+```{r}
+rm(list = ls())
+
+load(".../data_final.Rdata")
+
+round(dissimilarity(data_final, "sex", "position_kldb_2", weight = "survey_weight")$est * 100, 2)
+dissimilarity(data_final, "sex", "position_kldb_2", weight = "survey_weight", se = T, n_bootstrap = 1000)$CI
+
+```
+
+# propensity scores
+```{r}
+rm(list = ls())
+
+load(".../data_final.Rdata")
+
+formula_treatment <- formula("position_kldb_2 ~ age + birth_year + state + urban_residence + highest_education_detailed + family_status + has_children + hh_size + migration_background + partner_job_status")
+
+# male
+data_male <- data_final %>% filter(sex == "Male")
+
+model_male <- multinom(formula_treatment, data = data_male, family = "binomial", weights = survey_weight, MaxNWts = 10000000)
+  
+prob_occupation_male <- as.data.frame(predict(model_male, newdata = data_male, type = "probs"))
+
+colnames(prob_occupation_male) <- paste0("prop_occ_", colnames(prob_occupation_male))
+
+prob_occupation_male$model <- "Full specification"
+
+
+# female
+data_female <- data_final %>% filter(sex == "Female")
+
+model_female <- multinom(formula_treatment, data = data_female, family = "binomial", weights = survey_weight, MaxNWts = 10000000)
+  
+prob_occupation_female <- as.data.frame(predict(model_female, newdata = data_female, type = "probs"))
+  
+colnames(prob_occupation_female) <- paste0("prop_occ_", colnames(prob_occupation_female))
+
+prob_occupation_female$model <- "Full specification"
+
+# combine
+propensity_scores <- prob_occupation_female %>% pivot_longer(1:36) %>% rbind(prob_occupation_male %>% pivot_longer(1:36)) %>% mutate(model = "Full specification")
+
+ggplot() +
+  geom_histogram(data = prob_occupation_female %>% pivot_longer(1:36), aes(x = value, fill = "Female population"), color = "darkred", color = "darkred", alpha = .4, binwidth = 0.0005) + 
+  geom_histogram(data = prob_occupation_male %>% pivot_longer(1:36), aes(x = value, fill = "Male population"), color = "darkblue", color = "darkblue", alpha = .4, binwidth = 0.0005) +
+  scale_x_continuous("Propensity score", breaks = seq(0, 1, 0.02)) + 
+  scale_y_continuous("Frequency", breaks = seq(0, 3000000, 50000)) + 
+  coord_cartesian(xlim = c(0, 0.2)) +
+  theme_linedraw() +
+  theme(legend.position = "bottom", 
+        text = element_text(colour = "black"),
+        legend.title=element_blank(), 
+        legend.text = element_text(colour = "black", size = 14),
+        axis.title.x = element_text(colour = "black", face = "bold", size = 12),
+        axis.title.y = element_text(colour = "black", face = "bold", size = 12),
+        axis.text.x = element_text(colour = "black", size = 12),
+        axis.text.y = element_text(colour = "black", size = 12),
+        strip.text = element_text(colour = 'White', size = 13),
+        panel.background = element_rect(fill = "transparent", colour = NA_character_),
+        plot.background = element_rect(fill = "transparent", colour = NA_character_),
+        legend.background = element_rect(fill = "transparent"),
+        legend.key = element_rect(fill = "transparent"))
+ggsave(".../propensities.pdf", height = 5, width = 9, device = cairo_pdf)
+
+```
+
+# disparities
+```{r}
+rm(list = ls())
+
+load(".../data_final.Rdata")
+
+lm_robust(outcome ~ sex, weights = survey_weight, data_final %>%
+            mutate(outcome = ifelse(job_status %in% c("Part-time employed", "Full-time employed"), 100, 0)))
+
+lm_robust(outcome ~ sex, weights = survey_weight, data_final %>%
+            mutate(outcome = ifelse(job_status %in% c("Part-time employed", "Full-time employed"), 100, 0)) %>%
+            filter(highest_education == "Low"))
+
+lm_robust(outcome ~ sex, weights = survey_weight, data_final %>%
+            mutate(outcome = ifelse(job_status %in% c("Part-time employed", "Full-time employed"), 100, 0)) %>%
+            filter(east_germany == 1))
+
+```
+
+```{r}
+
+```
