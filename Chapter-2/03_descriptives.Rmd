@@ -1,7 +1,5 @@
 ---
-title: 'Descriptive statistics for both age groups'
-author: 'Jan Einhoff'
-date: '15/12/2023'
+title: '03_descriptives'
 ---
 
 ```{r setup}
